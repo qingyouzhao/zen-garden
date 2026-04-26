@@ -32,9 +32,14 @@ Rust + wgpu remains the upgrade path if GPU compute simulation becomes the core 
 
 ```bash
 npm install
-npm run dev        # Vite prints a local IP — open that on your phone to playtest
+npm run dev        # Vite prints a local IP — open that on your phone to playtest (same WiFi)
 npm run build      # production bundle → dist/
 ```
+
+**Live deployment:** every merge to `main` auto-deploys via GitHub Actions to:
+`https://qingyouzhao.github.io/zen-garden/`
+
+No local server needed to playtest on phone — just open that URL.
 
 ## Architecture
 
