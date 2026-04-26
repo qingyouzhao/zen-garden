@@ -47,7 +47,28 @@
 
 ---
 
-### 3. Godot (Web export)
+### 3. Rust + wgpu → WASM
+**Highest GPU sim ceiling; real iteration cost.**
+
+wgpu is the Rust implementation of the WebGPU API — the same spec browsers implement. It compiles to WASM and runs in-browser targeting either WebGPU or WebGL2 as a fallback.
+
+**Not blocked:**
+- WASM runs on iOS Safari, desktop Chrome/Safari — no install required.
+- wgpu's WebGL2 backend covers devices that don't yet support WebGPU.
+- Compute shaders are first-class; this is actually the most ergonomic path to heavy GPU sim (sand automata, fluid, SPH particles) of any option here.
+- Touch/pointer input is wired via `wasm-bindgen` JS interop — verbose but works fine.
+
+**Real costs:**
+- **Iteration speed is the main tax.** Rust recompiles on every change; no hot module reload. Tweaking sand feel or lighting means a 5–30 s compile cycle instead of instant HMR. For a prototype phase where game feel is everything, this adds up.
+- No scene graph, no camera controls, no asset pipeline out of the box — build or find crates (`winit`, `glam`, `wgpu` utilities) for everything Three.js gives for free.
+- WASM binary for a wgpu app runs 3–8 MB before assets; not a blocker but slower first load on mobile than the JS options.
+- `wasm-pack` / `wasm-bindgen` / `trunk` toolchain is mature but more setup than `npm create vite`.
+
+**Verdict:** No hard blockers for browser + mobile deployment. The cost is iteration speed during prototyping — exactly the phase we're in. If GPU simulation is the *core mechanic* (not just a nice-to-have), Rust + wgpu is worth that tax. If sim is secondary to feel and aesthetics, prototype in Three.js and migrate the compute-heavy parts to a WASM module later.
+
+---
+
+### 4. Godot (Web export)
 **Still ruled out.**
 
 - Web exports are 10–30 MB and require HTTPS + SharedArrayBuffer headers.
@@ -64,7 +85,11 @@
 - WebGPU compute shaders for GPU-based simulation when the time comes; falls back to WebGL fragment shaders in the interim.
 - Rapier (WASM) on standby for rigid-body physics if stones/objects need it.
 
-**Suggested first step:** spike a Three.js + Vite scene with a flat sand plane, an orbit/touch camera, and a point light. Confirm it feels right on phone before committing to the full architecture.
+**If GPU sim is the core mechanic:** Rust + wgpu is viable and has the highest ceiling. Accept the slower iteration loop and lean into it — write the compute pipeline first, get the sim feeling right, then build scene/rendering around it.
+
+**Suggested first step (Three.js path):** spike a Vite scene with a flat sand plane, orbit/touch camera, and a point light. Confirm it feels right on phone before committing to the full architecture.
+
+**Suggested first step (Rust path):** get a WASM build running in the browser with `trunk`, render a flat plane via wgpu, confirm touch input reaches Rust code. That smoke test reveals the real iteration friction before you commit.
 
 ---
 
