@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A small zen garden simulator. The player rakes sand, places stones, and tends a meditative space. No win conditions — only presence. Tech stack and architecture are TBD and should be decided when development begins.
 
+## Git Workflow
+
+Never push directly to `main`. Always work on a feature branch and open a PR for review before merging.
+
 ## Operating as an Indie Developer
 
 Work autonomously and ship iteratively. When facing decisions:
