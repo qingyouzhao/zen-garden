@@ -1,8 +1,52 @@
-# Zen Garden — Tech Stack Brainstorm
+# Zen Garden — Project Brainstorm
 
-**Goals:** instant playtest from any browser (phone + desktop), no install, touch-friendly, headroom for particle / GPU simulation later.
+**Stack decided: Three.js + Vite. 3D. Prioritising prototype speed.**
 
-**Direction decided: 3D. Stack decided: Three.js + Vite. Prioritising prototype speed over GPU sim ceiling for now.**
+---
+
+## Features
+
+### Phase 1 — First Playable ✅
+*A scene you can open on your phone and interact with.*
+
+- [x] Three.js scene: sand plane, box stone, directional light, shadows
+- [x] Rake mesh (handle, head, tines) follows touch/mouse via raycasting
+- [x] GitHub Pages auto-deploy on merge to main
+- [x] Manual deploy trigger for any branch
+
+### Phase 2 — It Feels Like a Zen Garden
+*The core loop: raking sand leaves marks.*
+
+- [ ] Rake strokes paint visible grooves into the sand surface (displacement or texture)
+- [ ] Grooves persist across the session; raking over them overwrites
+- [ ] Sand ripples curve naturally around stones
+- [ ] Multiple stone sizes and irregular shapes
+- [ ] Undo last stroke
+
+### Phase 3 — Atmosphere
+*The space feels alive and meditative.*
+
+- [ ] Soft ambient light that shifts with time of day (dawn, midday, dusk, night)
+- [ ] Subtle wind — gentle sway on any plants placed in the garden
+- [ ] Ambient audio: wind, distant birds, optional water
+- [ ] Mist / depth fog that thickens at edges
+
+### Phase 4 — Garden Authoring
+*The player builds their own space.*
+
+- [ ] Place, move, and remove stones freely
+- [ ] Additional objects: small plant/moss tufts, stone lantern, bamboo stalk
+- [ ] Multiple rake head styles (wide flat, narrow, curved tine patterns)
+- [ ] Save garden layout to localStorage; restore on reload
+- [ ] Export garden as a screenshot
+
+### Phase 5 — Simulation Depth *(GPU upgrade candidate)*
+*If the sand sim becomes the core mechanic, revisit Rust + wgpu here.*
+
+- [ ] Particle-based sand that physically displaces when raked
+- [ ] Stones cast sand shadows and disturb particles on placement
+- [ ] Water element: still pool that reflects the scene
+- [ ] Wind scatters fine surface sand slowly over time
 
 ---
 
