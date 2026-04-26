@@ -1,8 +1,69 @@
-# Zen Garden — Tech Stack Brainstorm
+# Zen Garden — Project Brainstorm
 
-**Goals:** instant playtest from any browser (phone + desktop), no install, touch-friendly, headroom for particle / GPU simulation later.
+**Stack decided: Three.js + Vite. 3D. Prioritising prototype speed.**
 
-**Direction decided: 3D. Stack decided: Three.js + Vite. Prioritising prototype speed over GPU sim ceiling for now.**
+---
+
+## Features
+
+### Phase 1 — First Playable ✅
+*A scene you can open on your phone and interact with.*
+
+- [x] Three.js scene: sand plane, box stone, directional light, shadows
+- [x] Rake mesh (handle, head, tines) follows touch/mouse via raycasting
+- [x] GitHub Pages auto-deploy on merge to main
+- [x] Manual deploy trigger for any branch
+
+### Phase 2 — It Feels Like a Zen Garden
+*The core loop: raking sand leaves marks.*
+
+- [ ] Grooves persist across the session; raking over them overwrites
+- [ ] Sand ripples curve naturally around stones
+- [ ] Multiple stone sizes and irregular shapes
+- [ ] Undo last stroke
+
+#### 2a — Mark Mechanism Exploration
+*Spike each approach, pick the one that looks and performs best on mobile.*
+
+- [ ] **Canvas texture paint** — draw strokes onto an offscreen 2D canvas used as a `THREE.CanvasTexture` on the sand plane. Fastest to implement; purely 2D.
+- [ ] **Displacement map** — write rake depth into a texture, read it in a vertex shader to physically push sand geometry down into grooves. Looks most realistic; requires a subdivided plane.
+- [ ] **Custom fragment shader** — store rake history in a render target; shader blends groove lines as a normal/height field. Most flexible long-term; pairs well with a future GPU sim.
+- [ ] **Decal projection** — project groove geometry onto the surface as a mesh decal. Easy to layer; less suited to continuous freehand strokes.
+
+#### 2b — Automation Raking Mode
+*The rake moves on its own, drawing meditative patterns. Player watches or takes over at any time.*
+
+- [ ] **Straight parallel lines** — rake sweeps back and forth across the full garden at even spacing
+- [ ] **Concentric rings** — rake traces expanding circles outward from a point (or around a stone)
+- [ ] **Spiral** — single continuous inward or outward Archimedean spiral
+- [ ] **Lissajous / parametric** — rake follows a slowly evolving parametric curve for organic, unpredictable patterns
+- [ ] Adjustable speed (slow/meditative ↔ fast/satisfying)
+- [ ] Player touch interrupts auto-mode and hands control back immediately
+
+### Phase 3 — Atmosphere
+*The space feels alive and meditative.*
+
+- [ ] Soft ambient light that shifts with time of day (dawn, midday, dusk, night)
+- [ ] Subtle wind — gentle sway on any plants placed in the garden
+- [ ] Ambient audio: wind, distant birds, optional water
+- [ ] Mist / depth fog that thickens at edges
+
+### Phase 4 — Garden Authoring
+*The player builds their own space.*
+
+- [ ] Place, move, and remove stones freely
+- [ ] Additional objects: small plant/moss tufts, stone lantern, bamboo stalk
+- [ ] Multiple rake head styles (wide flat, narrow, curved tine patterns)
+- [ ] Save garden layout to localStorage; restore on reload
+- [ ] Export garden as a screenshot
+
+### Phase 5 — Simulation Depth *(GPU upgrade candidate)*
+*If the sand sim becomes the core mechanic, revisit Rust + wgpu here.*
+
+- [ ] Particle-based sand that physically displaces when raked
+- [ ] Stones cast sand shadows and disturb particles on placement
+- [ ] Water element: still pool that reflects the scene
+- [ ] Wind scatters fine surface sand slowly over time
 
 ---
 
