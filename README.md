@@ -2,7 +2,7 @@
 
 **Goals:** instant playtest from any browser (phone + desktop), no install, touch-friendly, headroom for particle / GPU simulation later.
 
-**Direction decided: 3D.**
+**Direction decided: 3D. Stack decided: Three.js + Vite. Prioritising prototype speed over GPU sim ceiling for now.**
 
 ---
 

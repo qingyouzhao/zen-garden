@@ -18,10 +18,21 @@ Work autonomously and ship iteratively. When facing decisions:
 
 Only surface a question to the user when a decision is truly theirs to make (scope, feel, player experience). Implementation choices are yours.
 
-## When the Stack Is Chosen
+## Stack
+
+**Three.js + Vite** — chosen for prototype speed. 3D scene in the browser, instant HMR via Vite, open on phone via local IP.
+
+Rust + wgpu remains the upgrade path if GPU compute simulation becomes the core mechanic. Migrate then, not now.
+
+## Running the Game
+
+```bash
+npm install
+npm run dev        # opens on localhost; share local IP to test on phone
+```
+
+## When the Project Is Scaffolded
 
 Update this file with:
-- How to install dependencies and run the game locally
-- How to run tests (if any)
 - Key architectural entry points and data flow
 - Any non-obvious conventions or constraints
