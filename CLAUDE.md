@@ -32,11 +32,12 @@ Rust + wgpu remains the upgrade path if GPU compute simulation becomes the core 
 
 ```bash
 npm install
-npm run dev        # opens on localhost; share local IP to test on phone
+npm run dev        # Vite prints a local IP — open that on your phone to playtest
+npm run build      # production bundle → dist/
 ```
 
-## When the Project Is Scaffolded
+## Architecture
 
-Update this file with:
-- Key architectural entry points and data flow
-- Any non-obvious conventions or constraints
+Everything currently lives in `src/main.js` (single-file prototype). Split into modules as the codebase grows — suggested boundaries: `scene.js` (Three.js setup), `rake.js` (rake mesh + drag logic), `input.js` (pointer/touch abstraction).
+
+**Input model:** pointer and touch events both project onto a `THREE.Plane` at y=0 via raycasting. The rake follows that intersection point, clamped to the sand bounds.
