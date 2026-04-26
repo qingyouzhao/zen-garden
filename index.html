@@ -8,9 +8,32 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #111; overflow: hidden; touch-action: none; }
     canvas { display: block; }
+    #mode-label {
+      position: fixed;
+      top: 12px;
+      left: 14px;
+      color: #e8dcc8;
+      font-family: 'Georgia', serif;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      opacity: 0.85;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+      user-select: none;
+    }
+    #mode-label span {
+      font-size: 11px;
+      opacity: 0.6;
+      display: block;
+      margin-top: 2px;
+    }
   </style>
 </head>
 <body>
+  <div id="mode-label">
+    Mode 1 — Canvas Texture Paint
+    <span>press 1 / 2 to switch</span>
+  </div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
