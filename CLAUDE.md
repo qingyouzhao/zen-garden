@@ -10,6 +10,27 @@ A small zen garden simulator. The player rakes sand, places stones, and tends a 
 
 Never push directly to `main`. Always work on a feature branch and open a PR for review before merging.
 
+### Parallel Sub-agent Work — Use Git Worktrees
+
+When multiple agents run in parallel they share the same filesystem, causing files from one agent to bleed onto another agent's branch. Prevent this by giving each agent its own worktree:
+
+```bash
+# Each agent sets up an isolated worktree before doing any work
+git fetch origin
+git worktree add ../zen-garden-<feature-name> -b <branch-name> origin/main
+
+# Work entirely inside that directory
+cd ../zen-garden-<feature-name>
+npm install   # install deps in the worktree
+# ... make changes, commit, push, open PR ...
+
+# Clean up after the PR is open
+cd /home/user/zen-garden
+git worktree remove ../zen-garden-<feature-name>
+```
+
+Every agent spawned to work on a feature **must** create its own worktree at the start and do all work there. Never modify files in `/home/user/zen-garden` directly when running as a sub-agent alongside other agents.
+
 ## Operating as an Indie Developer
 
 Work autonomously and ship iteratively. When facing decisions:
