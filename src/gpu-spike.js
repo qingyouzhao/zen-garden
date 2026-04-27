@@ -37,7 +37,7 @@ const SPACING = (EXTENT * 2) / GRID;   // ~0.109 world units per tile
 
 const RAKE_RADIUS   = 0.6;
 const PUSH_STRENGTH = 0.09;
-const SETTLE_RATE   = 0.012;
+const SETTLE_RATE   = 0.0; // grooves persist until raked over
 
 // ---------------------------------------------------------------------------
 // TSL / WebGPU path (works on WebGPU natively; falls back to WebGL2 via
