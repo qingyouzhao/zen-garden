@@ -30,10 +30,14 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const GRID    = 128;
-const COUNT   = GRID * GRID;            // 16 384 particles
+const GRID    = 256;
+const COUNT   = GRID * GRID;            // 65 536 particles
 const EXTENT  = 7.0;                    // half-width of sand area, world units
-const SPACING = (EXTENT * 2) / GRID;   // ~0.109 world units per tile
+
+// Pointy-top hex grid geometry
+const HEX_R  = (EXTENT * 2) / GRID / Math.sqrt(3); // circumradius of each hex tile
+const H_STEP = HEX_R * Math.sqrt(3);               // horizontal centre-to-centre
+const V_STEP = HEX_R * 1.5;                         // vertical centre-to-centre
 
 const RAKE_RADIUS   = 0.6;
 const PUSH_STRENGTH = 0.09;
@@ -81,20 +85,23 @@ async function buildTSLScene() {
   // -------------------------------------------------------------------------
   // Compute shader (TSL Fn)
   // -------------------------------------------------------------------------
-  // 64-thread workgroups, 256 total groups for 16 384 particles.
+  // 64-thread workgroups, 1024 groups for 65 536 particles.
   // On WebGPU: runs as a true compute shader.
   // On WebGL2: emulated via transform feedback (Three.js handles this).
 
   const sandCompute = Fn(() => {
     const idx = instanceIndex;
 
-    // Integer grid coordinates from linear index
+    // Integer hex grid coordinates from linear index
     const col = idx.modInt(GRID);
     const row = idx.div(GRID);
 
-    // World-space centre of this particle tile (XZ)
-    const px = col.toFloat().mul(float(SPACING)).sub(float(EXTENT - SPACING * 0.5));
-    const pz = row.toFloat().mul(float(SPACING)).sub(float(EXTENT - SPACING * 0.5));
+    // World-space centre of this hex tile (XZ) — odd rows offset by half H_STEP
+    const isOdd = row.modInt(2).toFloat();
+    const px = col.toFloat().mul(float(H_STEP))
+      .add(isOdd.mul(float(H_STEP * 0.5)))
+      .sub(float(EXTENT));
+    const pz = row.toFloat().mul(float(V_STEP)).sub(float(EXTENT));
 
     // Distance from particle to rake
     const dx   = px.sub(uRakePos.x);
@@ -132,18 +139,22 @@ async function buildTSLScene() {
   const sandMat = new THREE.NodeMaterial();
   sandMat.side = THREE.DoubleSide;
 
-  // Vertex shader: reconstruct tile world-pos from instanceIndex, project
+  // Vertex shader: reconstruct hex tile world-pos from instanceIndex, project
   sandMat.vertexNode = Fn(() => {
     const idx = instanceIndex;
     const col = idx.modInt(GRID);
     const row = idx.div(GRID);
 
-    const px = col.toFloat().mul(float(SPACING)).sub(float(EXTENT - SPACING * 0.5));
-    const pz = row.toFloat().mul(float(SPACING)).sub(float(EXTENT - SPACING * 0.5));
+    // Match hex positioning from compute shader
+    const isOdd = row.modInt(2).toFloat();
+    const px = col.toFloat().mul(float(H_STEP))
+      .add(isOdd.mul(float(H_STEP * 0.5)))
+      .sub(float(EXTENT));
+    const pz = row.toFloat().mul(float(V_STEP)).sub(float(EXTENT));
     const py = dispBuffer.element(idx).mul(float(-0.18));  // grooves dip below y=0
 
-    // positionGeometry provides per-vertex local offsets within the tile quad.
-    // PlaneGeometry.rotateX(-PI/2) maps:  local X → world X, local Y → world Z.
+    // positionGeometry provides per-vertex local offsets within the hex tile.
+    // CircleGeometry.rotateX(-PI/2): local X → world X, local Y → world Z.
     const worldPos = vec3(
       px.add(positionGeometry.x),
       py,
@@ -162,8 +173,8 @@ async function buildTSLScene() {
     return vec4(mix(sandColor, grooveColor, d), float(1.0));
   })();
 
-  const tileGeo = new THREE.PlaneGeometry(SPACING * 1.04, SPACING * 1.04);
-  tileGeo.rotateX(-Math.PI / 2);
+  const tileGeo = new THREE.CircleGeometry(HEX_R * 0.97, 6);
+  tileGeo.rotateX(-Math.PI / 2); // lay flat in XZ plane; pointy-top orientation
 
   const particles = new THREE.InstancedMesh(tileGeo, sandMat, COUNT);
   particles.frustumCulled = false;
@@ -303,16 +314,18 @@ function buildGLSLFallback() {
 
   const tileDisplayMat = new THREE.ShaderMaterial({
     uniforms: {
-      uDisp:    { value: rtA.texture },
-      uGrid:    { value: GRID },
-      uExtent:  { value: EXTENT },
-      uSpacing: { value: SPACING },
+      uDisp:   { value: rtA.texture },
+      uGrid:   { value: GRID },
+      uExtent: { value: EXTENT },
+      uHStep:  { value: H_STEP },
+      uVStep:  { value: V_STEP },
     },
     vertexShader: /* glsl */`
       uniform sampler2D uDisp;
       uniform float uGrid;
       uniform float uExtent;
-      uniform float uSpacing;
+      uniform float uHStep;
+      uniform float uVStep;
       varying float vDisp;
 
       void main() {
@@ -323,8 +336,9 @@ function buildGLSLFallback() {
         float d   = texture2D(uDisp, uv).r;
         vDisp = d;
 
-        float px = col * uSpacing - (uExtent - uSpacing * 0.5);
-        float pz = row * uSpacing - (uExtent - uSpacing * 0.5);
+        float isOdd = mod(row, 2.0);
+        float px = col * uHStep + isOdd * uHStep * 0.5 - uExtent;
+        float pz = row * uVStep - uExtent;
         float py = d * -0.18;
 
         vec3 worldPos = position + vec3(px, py, pz);
@@ -341,7 +355,7 @@ function buildGLSLFallback() {
     `,
   });
 
-  const tileGeo = new THREE.PlaneGeometry(SPACING * 1.04, SPACING * 1.04);
+  const tileGeo = new THREE.CircleGeometry(HEX_R * 0.97, 6);
   tileGeo.rotateX(-Math.PI / 2);
 
   const tiles = new THREE.InstancedMesh(tileGeo, tileDisplayMat, COUNT);
