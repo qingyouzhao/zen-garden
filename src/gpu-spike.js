@@ -39,9 +39,10 @@ const HEX_R  = (EXTENT * 2) / GRID / Math.sqrt(3); // circumradius of each hex t
 const H_STEP = HEX_R * Math.sqrt(3);               // horizontal centre-to-centre
 const V_STEP = HEX_R * 1.5;                         // vertical centre-to-centre
 
-const RAKE_RADIUS   = 0.6;
-const PUSH_STRENGTH = 0.09;
-const SETTLE_RATE   = 0.0; // grooves persist until raked over
+const RAKE_RADIUS   = 0.7;  // overall bounding radius around rake head centre
+const PUSH_STRENGTH = 0.12;
+const TINE_OFFSETS  = [-0.52, -0.26, 0.0, 0.26, 0.52]; // world units along rake width
+const TINE_R        = 0.07; // half-width of each tine groove in world units
 
 // ---------------------------------------------------------------------------
 // TSL / WebGPU path (works on WebGPU natively; falls back to WebGL2 via
@@ -79,47 +80,51 @@ async function buildTSLScene() {
   // -------------------------------------------------------------------------
   const dispBuffer = instancedArray(COUNT, 'float');
 
-  // Uniform: rake world-space (X, Z) — .y holds world Z
+  // Uniforms: rake world-space XZ position and normalised movement direction
   const uRakePos = uniform(new THREE.Vector2(9999, 9999));
+  const uRakeDir = uniform(new THREE.Vector2(1, 0));
 
   // -------------------------------------------------------------------------
-  // Compute shader (TSL Fn)
+  // Compute shader (TSL Fn) — tine-aware influence
   // -------------------------------------------------------------------------
-  // 64-thread workgroups, 1024 groups for 65 536 particles.
-  // On WebGPU: runs as a true compute shader.
-  // On WebGL2: emulated via transform feedback (Three.js handles this).
+  // Each frame: for every particle, project its offset from the rake centre
+  // onto the axis perpendicular to movement (= along the rake head width).
+  // Only the 5 narrow strips that correspond to actual tine positions receive
+  // displacement, producing parallel grooves rather than a circular smear.
 
   const sandCompute = Fn(() => {
     const idx = instanceIndex;
 
-    // Integer hex grid coordinates from linear index
     const col = idx.modInt(GRID);
     const row = idx.div(GRID);
 
-    // World-space centre of this hex tile (XZ) — odd rows offset by half H_STEP
     const isOdd = row.modInt(2).toFloat();
     const px = col.toFloat().mul(float(H_STEP))
       .add(isOdd.mul(float(H_STEP * 0.5)))
       .sub(float(EXTENT));
     const pz = row.toFloat().mul(float(V_STEP)).sub(float(EXTENT));
 
-    // Distance from particle to rake
-    const dx   = px.sub(uRakePos.x);
-    const dz   = pz.sub(uRakePos.y);
+    const dx = px.sub(uRakePos.x);
+    const dz = pz.sub(uRakePos.y);
+
+    // Bounding gate: skip particles outside overall rake radius
     const dist = dx.mul(dx).add(dz.mul(dz)).sqrt();
+    const gate = smoothstep(float(RAKE_RADIUS), float(0.0), dist);
 
-    // Influence: 1.0 at centre, 0.0 at RAKE_RADIUS
-    const influence = smoothstep(float(RAKE_RADIUS), float(0.0), dist);
+    // Project onto rake-perpendicular axis (= along the rake head width)
+    // rakePerp = (-rakeDir.z, rakeDir.x) in XZ terms stored as (y, x)
+    const dPerp = dx.mul(uRakeDir.y.negate()).add(dz.mul(uRakeDir.x));
 
-    // Update displacement in-place
+    // Max influence across all 5 tines
+    const tineInf = float(0.0).toVar();
+    for (const tOff of TINE_OFFSETS) {
+      const d = dPerp.sub(float(tOff)).abs();
+      tineInf.assign(tineInf.max(smoothstep(float(TINE_R), float(0.0), d)));
+    }
+
+    const influence = tineInf.mul(gate);
     const disp = dispBuffer.element(idx);
-    disp.assign(
-      clamp(
-        disp.add(influence.mul(float(PUSH_STRENGTH))).sub(float(SETTLE_RATE)),
-        float(0.0),
-        float(1.0)
-      )
-    );
+    disp.assign(clamp(disp.add(influence.mul(float(PUSH_STRENGTH))), float(0.0), float(1.0)));
   })().compute(COUNT, [64]);
 
   // Zero-initialise all displacements
@@ -193,9 +198,10 @@ async function buildTSLScene() {
   rakeGroup.position.set(0, 0, 2);
   scene.add(rakeGroup);
 
-  // Input
-  const { onDown, onMove, onUp } = buildInput(camera, rakeGroup, (wx, wz) => {
+  // Input — also receives normalised movement direction for tine orientation
+  const { onDown, onMove, onUp } = buildInput(camera, rakeGroup, (wx, wz, dx, dz) => {
     uRakePos.value.set(wx, wz);
+    uRakeDir.value.set(dx, dz);
   });
   attachEvents(renderer.domElement, onDown, onMove, onUp);
 
@@ -266,13 +272,19 @@ function buildGLSLFallback() {
   const simScene  = new THREE.Scene();
   const simCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
+  const TINE_SPACING_UV = 0.26 / (EXTENT * 2); // tine spacing in UV space
+  const TINE_R_UV       = TINE_R / (EXTENT * 2);
+  const RAKE_R_UV       = RAKE_RADIUS / (EXTENT * 2);
+
   const simMat = new THREE.ShaderMaterial({
     uniforms: {
       uState:   { value: rtA.texture },
       uRakePos: { value: new THREE.Vector2(9999, 9999) },
-      uRakeR:   { value: RAKE_RADIUS / (EXTENT * 2) },
+      uRakeDir: { value: new THREE.Vector2(1, 0) },
+      uRakeR:   { value: RAKE_R_UV },
+      uTineR:   { value: TINE_R_UV },
+      uTineSp:  { value: TINE_SPACING_UV },
       uPush:    { value: PUSH_STRENGTH },
-      uSettle:  { value: SETTLE_RATE },
     },
     vertexShader: /* glsl */`
       varying vec2 vUv;
@@ -281,18 +293,33 @@ function buildGLSLFallback() {
     fragmentShader: /* glsl */`
       uniform sampler2D uState;
       uniform vec2  uRakePos;
+      uniform vec2  uRakeDir;
       uniform float uRakeR;
+      uniform float uTineR;
+      uniform float uTineSp;
       uniform float uPush;
-      uniform float uSettle;
       varying vec2 vUv;
 
       void main() {
-        float cur  = texture2D(uState, vUv).r;
-        float d    = length(vUv - uRakePos);
-        float t    = clamp((uRakeR - d) / uRakeR, 0.0, 1.0);
-        float inf  = t * t * (3.0 - 2.0 * t);
-        float next = clamp(cur + inf * uPush - uSettle, 0.0, 1.0);
-        gl_FragColor = vec4(next, 0.0, 0.0, 1.0);
+        float cur = texture2D(uState, vUv).r;
+
+        vec2  d    = vUv - uRakePos;
+        float dist = length(d);
+        float gate = 1.0 - smoothstep(0.0, uRakeR, dist);
+
+        // Project onto rake-perpendicular axis
+        vec2  perp = vec2(-uRakeDir.y, uRakeDir.x);
+        float dPerp = dot(d, perp);
+
+        float tineInf = 0.0;
+        for (int i = -2; i <= 2; i++) {
+          float tOff = float(i) * uTineSp;
+          float dt   = abs(dPerp - tOff);
+          tineInf    = max(tineInf, 1.0 - smoothstep(0.0, uTineR, dt));
+        }
+
+        float influence = tineInf * gate;
+        gl_FragColor = vec4(clamp(cur + influence * uPush, 0.0, 1.0), 0.0, 0.0, 1.0);
       }
     `,
   });
@@ -374,11 +401,12 @@ function buildGLSLFallback() {
   rakeGroup.position.set(0, 0, 2);
   scene.add(rakeGroup);
 
-  const { onDown, onMove, onUp } = buildInput(camera, rakeGroup, (wx, wz) => {
+  const { onDown, onMove, onUp } = buildInput(camera, rakeGroup, (wx, wz, dx, dz) => {
     simMat.uniforms.uRakePos.value.set(
       (wx + EXTENT) / (EXTENT * 2),
       (wz + EXTENT) / (EXTENT * 2)
     );
+    simMat.uniforms.uRakeDir.value.set(dx, dz);
   });
   attachEvents(renderer.domElement, onDown, onMove, onUp);
 
@@ -462,14 +490,20 @@ function buildInput(camera, rakeGroup, onRakeMove) {
   const raycaster   = new THREE.Raycaster();
   const pointer     = new THREE.Vector2();
   const target      = new THREE.Vector3();
-  let dragging = false;
+  let dragging  = false;
+  let prevWorld = null;
+  let lastDir   = { x: 1, z: 0 }; // default direction until first move
 
   function updatePointer(cx, cy) {
     pointer.x = (cx / window.innerWidth)  *  2 - 1;
     pointer.y = (cy / window.innerHeight) * -2 + 1;
   }
 
-  function onDown(cx, cy) { dragging = true; updatePointer(cx, cy); }
+  function onDown(cx, cy) {
+    dragging = true;
+    prevWorld = null;
+    updatePointer(cx, cy);
+  }
 
   function onMove(cx, cy) {
     if (!dragging) return;
@@ -479,10 +513,19 @@ function buildInput(camera, rakeGroup, onRakeMove) {
     target.x = Math.max(-EXTENT, Math.min(EXTENT, target.x));
     target.z = Math.max(-EXTENT, Math.min(EXTENT, target.z));
     rakeGroup.position.set(target.x, 0, target.z);
-    onRakeMove(target.x, target.z);
+
+    if (prevWorld) {
+      const ddx = target.x - prevWorld.x;
+      const ddz = target.z - prevWorld.z;
+      const len = Math.sqrt(ddx * ddx + ddz * ddz);
+      if (len > 0.001) lastDir = { x: ddx / len, z: ddz / len };
+    }
+    prevWorld = { x: target.x, z: target.z };
+
+    onRakeMove(target.x, target.z, lastDir.x, lastDir.z);
   }
 
-  function onUp() { dragging = false; }
+  function onUp() { dragging = false; prevWorld = null; }
 
   return { onDown, onMove, onUp };
 }
