@@ -11,6 +11,7 @@ export default defineConfig({
       input: {
         main:    resolve(__dirname, 'index.html'),
         classic: resolve(__dirname, 'classic.html'),
+        gpu:     resolve(__dirname, 'gpu.html'),
       },
     },
   },

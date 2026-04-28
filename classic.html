@@ -8,9 +8,23 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #111; overflow: hidden; touch-action: none; }
     canvas { display: block; }
+    #back {
+      position: fixed;
+      top: 12px;
+      right: 14px;
+      color: #e8dcc8;
+      font-family: 'Georgia', serif;
+      font-size: 12px;
+      opacity: 0.6;
+      text-decoration: none;
+      letter-spacing: 0.04em;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+    }
+    #back:hover { opacity: 1; }
   </style>
 </head>
 <body>
+  <a id="back" href="/zen-garden/">← back</a>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
