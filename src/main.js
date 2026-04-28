@@ -104,18 +104,19 @@ const posAttr = sandGeo.attributes.position;
 // Apply heightmap to geometry vertices
 // Three.js PlaneGeometry (before rotation) lays verts left→right, top→bottom in XY
 // X goes -7..+7 (col index 0..GRID), Y goes +7..-7 (row index 0..GRID)
-// After rotation.x = -PI/2: X stays X, Y→Z (so Y=+7 becomes Z=-7 in world)
-// We index our heightmap as: i=col (X), j=row (from +Z to -Z in world)
+// After rotation.x = -PI/2: world_x = geom_x, world_z = -geom_y
+//   → geom row 0 (y=+7) → world z = -7  → gridJ = 0
+//   → geom row GRID (y=-7) → world z = +7 → gridJ = GRID
+// worldToGrid uses j = floor((wz + 7) / 14 * 64), so j=0 at wz=-7, j=63 at wz≈+7
+// gridJ = row keeps this consistent (no Z-axis flip).
 function applyHeightmap() {
   let vi = 0;
   for (let row = 0; row <= GRID; row++) {
     for (let col = 0; col <= GRID; col++) {
-      // In the unrotated plane geometry: x = col, y = row (top-to-bottom)
-      // Map col 0→GRID to grid i 0→GRID, row 0→GRID to grid j GRID→0 (flipped)
       const gridI = col;
-      const gridJ = GRID - row;  // flip so j=0 is at world Z=+7
+      const gridJ = row;  // row 0 (world z=-7) → j=0, consistent with worldToGrid
       const h = heightmap[idx(gridI, gridJ)];
-      posAttr.setZ(vi, h);  // Z in the unrotated plane = Y in world after rotation
+      posAttr.setZ(vi, h);  // Z in unrotated plane becomes Y in world after rotation
       vi++;
     }
   }
