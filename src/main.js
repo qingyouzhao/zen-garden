@@ -26,16 +26,145 @@ sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
 scene.add(sun);
 
-// --- Sand plane ---
-const sand = new THREE.Mesh(
-  new THREE.PlaneGeometry(14, 14),
-  new THREE.MeshLambertMaterial({ color: 0xc8b89a })
-);
+// --- Heightmap sand simulation ---
+// 64x64 cells over 14x14 world units
+const GRID = 64;              // number of cells per side
+const VERTS = GRID + 1;       // number of vertices per side (65x65)
+const WORLD_SIZE = 14;        // world units
+const CELL_SIZE = WORLD_SIZE / GRID;  // ≈ 0.21875 units
+
+// Repose angle: ~30 degrees → tan(30°) ≈ 0.577
+const TAN_REPOSE = Math.tan(Math.PI / 6);
+
+// Height array — row-major, index = row * VERTS + col
+const heightmap = new Float32Array(VERTS * VERTS);
+
+// Dirty-region tracking: we maintain a bounding box of disturbed cells
+// expanded each frame until sand settles
+let dirtyMinI = VERTS, dirtyMaxI = -1;
+let dirtyMinJ = VERTS, dirtyMaxJ = -1;
+let maxTransfer = 0;  // largest height transfer this relaxation pass
+
+function markDirty(i, j) {
+  dirtyMinI = Math.min(dirtyMinI, i);
+  dirtyMaxI = Math.max(dirtyMaxI, i);
+  dirtyMinJ = Math.min(dirtyMinJ, j);
+  dirtyMaxJ = Math.max(dirtyMaxJ, j);
+}
+
+function hasDirty() {
+  return dirtyMaxI >= dirtyMinI && dirtyMaxJ >= dirtyMinJ;
+}
+
+function expandDirty(amount) {
+  if (!hasDirty()) return;
+  dirtyMinI = Math.max(0, dirtyMinI - amount);
+  dirtyMaxI = Math.min(VERTS - 1, dirtyMaxI + amount);
+  dirtyMinJ = Math.max(0, dirtyMinJ - amount);
+  dirtyMaxJ = Math.min(VERTS - 1, dirtyMaxJ + amount);
+}
+
+function clearDirty() {
+  dirtyMinI = VERTS; dirtyMaxI = -1;
+  dirtyMinJ = VERTS; dirtyMaxJ = -1;
+}
+
+// Convert world X,Z to grid indices (clamped)
+function worldToGrid(wx, wz) {
+  const i = Math.floor((wx + WORLD_SIZE / 2) / WORLD_SIZE * GRID);
+  const j = Math.floor((wz + WORLD_SIZE / 2) / WORLD_SIZE * GRID);
+  return [
+    Math.max(0, Math.min(GRID - 1, i)),
+    Math.max(0, Math.min(GRID - 1, j))
+  ];
+}
+
+// Heightmap index for vertex at (i, j) — i = column, j = row
+function idx(i, j) {
+  return j * VERTS + i;
+}
+
+// --- Sand geometry ---
+// PlaneGeometry rows/cols = segment counts (GRID x GRID = 64x64 segments, 65x65 verts)
+const sandGeo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, GRID, GRID);
+// PlaneGeometry is in XY plane, we rotate it to XZ; vertices laid out row-major by Three.js
+// After rotation the geometry is XZ-plane. We will update vertex positions directly.
+const sandMat = new THREE.MeshLambertMaterial({
+  color: 0xc8b89a,
+  side: THREE.FrontSide,
+});
+const sand = new THREE.Mesh(sandGeo, sandMat);
 sand.rotation.x = -Math.PI / 2;
 sand.receiveShadow = true;
 scene.add(sand);
 
-// --- Stone (box) ---
+// Cache reference to position attribute for fast updates
+const posAttr = sandGeo.attributes.position;
+
+// Apply heightmap to geometry vertices
+// Three.js PlaneGeometry (before rotation) lays verts left→right, top→bottom in XY
+// X goes -7..+7 (col index 0..GRID), Y goes +7..-7 (row index 0..GRID)
+// After rotation.x = -PI/2: X stays X, Y→Z (so Y=+7 becomes Z=-7 in world)
+// We index our heightmap as: i=col (X), j=row (from +Z to -Z in world)
+function applyHeightmap() {
+  let vi = 0;
+  for (let row = 0; row <= GRID; row++) {
+    for (let col = 0; col <= GRID; col++) {
+      // In the unrotated plane geometry: x = col, y = row (top-to-bottom)
+      // Map col 0→GRID to grid i 0→GRID, row 0→GRID to grid j GRID→0 (flipped)
+      const gridI = col;
+      const gridJ = GRID - row;  // flip so j=0 is at world Z=+7
+      const h = heightmap[idx(gridI, gridJ)];
+      posAttr.setZ(vi, h);  // Z in the unrotated plane = Y in world after rotation
+      vi++;
+    }
+  }
+  posAttr.needsUpdate = true;
+  sandGeo.computeVertexNormals();
+}
+
+// Relaxation pass over dirty region
+// Runs 4 iterations per call for faster convergence
+function relaxSand(iterations) {
+  if (!hasDirty()) return;
+
+  const minI = Math.max(1, dirtyMinI);
+  const maxI = Math.min(VERTS - 2, dirtyMaxI);
+  const minJ = Math.max(1, dirtyMinJ);
+  const maxJ = Math.min(VERTS - 2, dirtyMaxJ);
+
+  const threshold = TAN_REPOSE * CELL_SIZE;
+  maxTransfer = 0;
+
+  for (let iter = 0; iter < iterations; iter++) {
+    for (let j = minJ; j <= maxJ; j++) {
+      for (let i = minI; i <= maxI; i++) {
+        const c = idx(i, j);
+        const h = heightmap[c];
+
+        // Check 4 orthogonal neighbors
+        const neighbors = [
+          idx(i + 1, j),
+          idx(i - 1, j),
+          idx(i, j + 1),
+          idx(i, j - 1),
+        ];
+
+        for (const n of neighbors) {
+          const diff = h - heightmap[n];
+          if (diff > threshold) {
+            const transfer = (diff - threshold) * 0.5;
+            heightmap[c] -= transfer;
+            heightmap[n] += transfer;
+            if (transfer > maxTransfer) maxTransfer = transfer;
+          }
+        }
+      }
+    }
+  }
+}
+
+// --- Stone ---
 const stone = new THREE.Mesh(
   new THREE.BoxGeometry(1.2, 0.7, 1.0),
   new THREE.MeshLambertMaterial({ color: 0x666055 })
@@ -62,7 +191,11 @@ const head = new THREE.Mesh(
 head.position.set(0, 0.06, 0);
 rakeGroup.add(head);
 
-// Tines
+// 5 tines spaced 0.26 apart
+const TINE_OFFSETS = [-2, -1, 0, 1, 2].map(i => i * 0.26);
+const TINE_DEPTH = 0.15;   // how deep the groove is
+const TINE_RADIUS = 0.10;  // world-unit radius of each tine's influence
+
 for (let i = -2; i <= 2; i++) {
   const tine = new THREE.Mesh(
     new THREE.CylinderGeometry(0.025, 0.015, 0.22, 6),
@@ -82,6 +215,9 @@ const pointer = new THREE.Vector2();
 const target = new THREE.Vector3();
 let dragging = false;
 
+// Track previous rake position for displacement direction
+const prevRakePos = new THREE.Vector3(0, 0, 2);
+
 function updatePointer(clientX, clientY) {
   pointer.x = (clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(clientY / window.innerHeight) * 2 + 1;
@@ -92,6 +228,82 @@ function onDown(clientX, clientY) {
   updatePointer(clientX, clientY);
 }
 
+// Displace sand under rake tines and deposit ahead
+function displaceWithRake(rakeX, rakeZ, dx, dz) {
+  const moveDist = Math.sqrt(dx * dx + dz * dz);
+  if (moveDist < 0.001) return;
+
+  // Unit direction of motion
+  const ndx = dx / moveDist;
+  const ndz = dz / moveDist;
+
+  // Tine radius in grid cells
+  const tineRadiusCells = Math.ceil(TINE_RADIUS / CELL_SIZE) + 1;
+  // Deposit offset: 2-3 cells ahead in direction of motion
+  const depositOffset = 2.5 * CELL_SIZE;
+
+  for (const tineOX of TINE_OFFSETS) {
+    // Tine world position — offset perpendicular to motion
+    // Perpendicular to (ndx, ndz) is (-ndz, ndx)
+    const tineWX = rakeX + tineOX * (-ndz);
+    const tineWZ = rakeZ + tineOX * ndx;
+
+    const [ti, tj] = worldToGrid(tineWX, tineWZ);
+
+    // Groove: subtract height in cells near the tine
+    let totalRemoved = 0;
+
+    for (let di = -tineRadiusCells; di <= tineRadiusCells; di++) {
+      for (let dj = -tineRadiusCells; dj <= tineRadiusCells; dj++) {
+        const ci = ti + di;
+        const cj = tj + dj;
+        if (ci < 0 || ci >= VERTS || cj < 0 || cj >= VERTS) continue;
+
+        // World position of this cell
+        const cwx = (ci / GRID) * WORLD_SIZE - WORLD_SIZE / 2;
+        const cwz = (cj / GRID) * WORLD_SIZE - WORLD_SIZE / 2;
+        const dist = Math.sqrt((cwx - tineWX) ** 2 + (cwz - tineWZ) ** 2);
+
+        if (dist < TINE_RADIUS) {
+          // Smooth falloff within the tine radius
+          const falloff = 1 - dist / TINE_RADIUS;
+          const removal = TINE_DEPTH * falloff;
+          const cellIdx = idx(ci, cj);
+          const actual = Math.min(removal, heightmap[cellIdx] + 0.3); // don't dig below -0.3
+          heightmap[cellIdx] -= actual;
+          totalRemoved += actual;
+          markDirty(ci, cj);
+        }
+      }
+    }
+
+    // Deposit removed sand 2-3 cells ahead
+    const depWX = tineWX + ndx * depositOffset;
+    const depWZ = tineWZ + ndz * depositOffset;
+    const [di2, dj2] = worldToGrid(depWX, depWZ);
+
+    // Distribute over a small area
+    const depositCells = [];
+    for (let di = -1; di <= 1; di++) {
+      for (let dj = -1; dj <= 1; dj++) {
+        const ci = di2 + di;
+        const cj = dj2 + dj;
+        if (ci >= 0 && ci < VERTS && cj >= 0 && cj < VERTS) {
+          depositCells.push([ci, cj]);
+        }
+      }
+    }
+
+    if (depositCells.length > 0 && totalRemoved > 0) {
+      const share = totalRemoved / depositCells.length;
+      for (const [ci, cj] of depositCells) {
+        heightmap[idx(ci, cj)] += share;
+        markDirty(ci, cj);
+      }
+    }
+  }
+}
+
 function onMove(clientX, clientY) {
   if (!dragging) return;
   updatePointer(clientX, clientY);
@@ -100,7 +312,24 @@ function onMove(clientX, clientY) {
   // Clamp to sand bounds
   target.x = Math.max(-6.5, Math.min(6.5, target.x));
   target.z = Math.max(-6.5, Math.min(6.5, target.z));
-  rakeGroup.position.set(target.x, 0, target.z);
+
+  const dx = target.x - prevRakePos.x;
+  const dz = target.z - prevRakePos.z;
+
+  displaceWithRake(target.x, target.z, dx, dz);
+
+  prevRakePos.set(target.x, prevRakePos.y, target.z);
+
+  // Position rake on sand surface
+  const [ri, rj] = worldToGrid(target.x, target.z);
+  const surfaceH = heightmap[idx(ri, rj)];
+  rakeGroup.position.set(target.x, surfaceH, target.z);
+
+  // Orient rake in direction of motion
+  const moveDist = Math.sqrt(dx * dx + dz * dz);
+  if (moveDist > 0.005) {
+    rakeGroup.rotation.y = Math.atan2(dx, dz);
+  }
 }
 
 function onUp() { dragging = false; }
@@ -129,8 +358,26 @@ window.addEventListener('resize', () => {
 });
 
 // --- Loop ---
+const SETTLE_THRESHOLD = 0.0001;  // stop expanding dirty region when stable
+
 function animate() {
   requestAnimationFrame(animate);
+
+  if (hasDirty()) {
+    // Run 4 relaxation iterations on the dirty region
+    relaxSand(4);
+
+    // Grow the dirty region each frame so slumping propagates outward
+    if (maxTransfer > SETTLE_THRESHOLD) {
+      expandDirty(2);
+    } else {
+      // Sand has settled in this region — clear dirty
+      clearDirty();
+    }
+
+    applyHeightmap();
+  }
+
   renderer.render(scene, camera);
 }
 animate();
