@@ -40,6 +40,26 @@
       text-shadow: 0 1px 3px rgba(0,0,0,0.7);
     }
     #back:hover { opacity: 1; }
+    #clear-btn {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(232,220,200,0.3);
+      color: #e8dcc8;
+      font-family: 'Georgia', serif;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      opacity: 0.6;
+      padding: 6px 18px;
+      cursor: pointer;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+      border-radius: 2px;
+      user-select: none;
+    }
+    #clear-btn:hover { opacity: 1; }
+    #clear-btn:active { opacity: 0.5; }
     #fallback-banner {
       display: none;
       position: fixed;
@@ -61,6 +81,7 @@
     <span>drag to rake  |  detecting renderer...</span>
   </div>
   <a id="back" href="/zen-garden/">← back</a>
+  <button id="clear-btn">clear</button>
   <div id="fallback-banner">
     WebGPU/WebGL2 compute unavailable — using GLSL ping-pong fallback
   </div>
