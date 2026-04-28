@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Zen Garden — GPU Spike</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #111; overflow: hidden; touch-action: none; }
+    canvas { display: block; }
+    #info {
+      position: fixed;
+      top: 12px;
+      left: 14px;
+      color: #e8dcc8;
+      font-family: 'Georgia', serif;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      opacity: 0.85;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+      user-select: none;
+    }
+    #info span {
+      font-size: 11px;
+      opacity: 0.6;
+      display: block;
+      margin-top: 2px;
+    }
+    #back {
+      position: fixed;
+      top: 12px;
+      right: 14px;
+      color: #e8dcc8;
+      font-family: 'Georgia', serif;
+      font-size: 12px;
+      opacity: 0.6;
+      text-decoration: none;
+      letter-spacing: 0.04em;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+    }
+    #back:hover { opacity: 1; }
+    #fallback-banner {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(80,40,0,0.85);
+      color: #ffd;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 8px 14px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    Zen Garden — GPU Spike
+    <span>drag to rake  |  detecting renderer...</span>
+  </div>
+  <a id="back" href="/zen-garden/">← back</a>
+  <div id="fallback-banner">
+    WebGPU/WebGL2 compute unavailable — using GLSL ping-pong fallback
+  </div>
+  <script type="module" src="/src/gpu-spike.js"></script>
+</body>
+</html>

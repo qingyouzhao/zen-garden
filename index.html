@@ -2,54 +2,117 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Zen Garden</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #111; overflow: hidden; touch-action: none; }
-    canvas { display: block; }
-    #info {
-      position: fixed;
-      top: 12px;
-      left: 14px;
+
+    body {
+      background: #0e0d0b;
       color: #e8dcc8;
       font-family: 'Georgia', serif;
-      font-size: 13px;
-      letter-spacing: 0.04em;
-      opacity: 0.85;
-      pointer-events: none;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.7);
-      user-select: none;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
     }
-    #info span {
-      font-size: 11px;
-      opacity: 0.6;
-      display: block;
-      margin-top: 2px;
+
+    h1 {
+      font-size: clamp(1.8rem, 5vw, 3rem);
+      font-weight: normal;
+      letter-spacing: 0.12em;
+      margin-bottom: 8px;
+      color: #f0e6d0;
     }
-    #fallback-banner {
-      display: none;
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: rgba(80,40,0,0.85);
-      color: #ffd;
+
+    .subtitle {
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      opacity: 0.45;
+      margin-bottom: 56px;
+    }
+
+    .options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      justify-content: center;
+      max-width: 720px;
+      width: 100%;
+    }
+
+    .option {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 6px;
+      padding: 28px 32px;
+      text-decoration: none;
+      color: inherit;
+      flex: 1 1 260px;
+      max-width: 320px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .option:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.2);
+    }
+
+    .option-title {
+      font-size: 1.05rem;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+      color: #f0e6d0;
+    }
+
+    .option-desc {
+      font-size: 0.8rem;
+      line-height: 1.65;
+      opacity: 0.5;
+      font-family: system-ui, sans-serif;
+    }
+
+    .option-tag {
+      display: inline-block;
+      margin-top: 16px;
+      font-size: 0.7rem;
       font-family: monospace;
-      font-size: 12px;
-      padding: 8px 14px;
-      text-align: center;
+      letter-spacing: 0.05em;
+      padding: 3px 8px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.06);
+      color: rgba(232,220,200,0.5);
+    }
+
+    footer {
+      margin-top: 64px;
+      font-size: 0.72rem;
+      opacity: 0.25;
+      letter-spacing: 0.05em;
+      font-family: system-ui, sans-serif;
     }
   </style>
 </head>
 <body>
-  <div id="info">
-    Zen Garden
-    <span>drag to rake  |  detecting renderer...</span>
+  <h1>Zen Garden</h1>
+  <p class="subtitle">rake sand &nbsp;·&nbsp; place stones &nbsp;·&nbsp; find stillness</p>
+
+  <div class="options">
+    <a class="option" href="/zen-garden/classic.html">
+      <div class="option-title">Classic</div>
+      <div class="option-desc">Three.js renderer with pointer and touch input. Rake drag trails across a sand plane.</div>
+      <span class="option-tag">three.js</span>
+    </a>
+
+    <a class="option" href="/zen-garden/gpu.html">
+      <div class="option-title">GPU Spike</div>
+      <div class="option-desc">WebGPU / WebGL2 compute sand simulation with GLSL ping-pong fallback for older devices.</div>
+      <span class="option-tag">webgpu · webgl2</span>
+    </a>
   </div>
-  <div id="fallback-banner">
-    WebGPU/WebGL2 compute unavailable — using GLSL ping-pong fallback
-  </div>
-  <script type="module" src="/src/gpu-spike.js"></script>
+
+  <footer>no win conditions — only presence</footer>
 </body>
 </html>
