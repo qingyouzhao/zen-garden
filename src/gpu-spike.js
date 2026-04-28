@@ -522,6 +522,7 @@ function buildInput(camera, rakeGroup, onRakeMove) {
     }
     prevWorld = { x: target.x, z: target.z };
 
+    rakeGroup.rotation.y = Math.atan2(lastDir.x, lastDir.z);
     onRakeMove(target.x, target.z, lastDir.x, lastDir.z);
   }
 
