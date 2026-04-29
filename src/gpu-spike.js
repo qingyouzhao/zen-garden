@@ -127,12 +127,13 @@ async function buildTSLScene() {
     disp.assign(clamp(disp.add(influence.mul(float(PUSH_STRENGTH))), float(0.0), float(1.0)));
   })().compute(COUNT, [64]);
 
-  // Zero-initialise all displacements
-  await renderer.computeAsync(
-    Fn(() => {
-      dispBuffer.element(instanceIndex).assign(float(0.0));
-    })().compute(COUNT, [64])
-  );
+  // Reusable compute kernel to zero all displacements
+  const clearCompute = Fn(() => {
+    dispBuffer.element(instanceIndex).assign(float(0.0));
+  })().compute(COUNT, [64]);
+
+  // Zero-initialise all displacements on load
+  await renderer.computeAsync(clearCompute);
 
   // -------------------------------------------------------------------------
   // Particle rendering
@@ -197,6 +198,10 @@ async function buildTSLScene() {
   const rakeGroup = buildRake();
   rakeGroup.position.set(0, 0, 2);
   scene.add(rakeGroup);
+
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    renderer.computeAsync(clearCompute);
+  });
 
   // Input — also receives normalised movement direction for tine orientation
   const { onDown, onMove, onUp } = buildInput(camera, rakeGroup, (wx, wz, dx, dz) => {
@@ -400,6 +405,22 @@ function buildGLSLFallback() {
   const rakeGroup = buildRake();
   rakeGroup.position.set(0, 0, 2);
   scene.add(rakeGroup);
+
+  // Zero-output quad used by the clear button to wipe both ping-pong targets
+  const clearScene  = new THREE.Scene();
+  const clearMat    = new THREE.ShaderMaterial({
+    vertexShader:   'void main(){gl_Position=vec4(position.xy,0.0,1.0);}',
+    fragmentShader: 'void main(){gl_FragColor=vec4(0.0);}',
+  });
+  clearScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), clearMat));
+
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    renderer.setRenderTarget(rtA);
+    renderer.render(clearScene, simCamera);
+    renderer.setRenderTarget(rtB);
+    renderer.render(clearScene, simCamera);
+    renderer.setRenderTarget(null);
+  });
 
   const { onDown, onMove, onUp } = buildInput(camera, rakeGroup, (wx, wz, dx, dz) => {
     simMat.uniforms.uRakePos.value.set(
