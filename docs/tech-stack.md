@@ -1,0 +1,102 @@
+# Zen Garden — Tech Stack Brainstorm
+
+**Goals:** instant playtest from any browser (phone + desktop), no install, touch-friendly, headroom for particle / GPU simulation later.
+
+**Direction decided: 3D. Stack decided: Three.js + Vite. Prioritising prototype speed over GPU sim ceiling for now.**
+
+---
+
+## Evaluation Criteria
+
+| Criterion | Weight |
+|---|---|
+| Zero-install browser play (iOS Safari, desktop Chrome/Safari) | Must-have |
+| Touch + pointer input | Must-have |
+| 3D rendering (scene, lighting, materials) | Must-have |
+| GPU sim headroom (particles, sand, fluid) | High |
+| Fast iteration / hot reload | High |
+| Bundle size / load time on mobile | Medium |
+
+---
+
+## Contenders (3D-only shortlist)
+
+### 1. Three.js + WebGPU renderer
+**Recommended.**
+
+- The dominant browser 3D library; massive ecosystem, examples, and community.
+- `THREE.WebGPURenderer` (available now, still maturing) unlocks compute shaders for GPU-based sand/particle/fluid simulation.
+- Falls back to WebGL on older devices automatically.
+- Lightweight core (~600 KB); add what you need.
+- No built-in physics — pair with **Rapier (WASM)** for rigid bodies if needed.
+- Vite as dev server gives instant HMR and ships a single optimized bundle.
+
+**Verdict:** Best combination of 3D quality, GPU sim ceiling, mobile reach, and iteration speed.
+
+---
+
+### 2. Babylon.js
+**Strong alternative if editor tooling matters.**
+
+- More "game engine" than library: scene graph, inspector GUI, asset pipeline, physics (Havok built in) all included.
+- Excellent WebGPU support; compute shaders available.
+- Heavier bundle (~2–3 MB); inspector is a significant DX advantage for scene debugging.
+- Less community content than Three.js; API is more opinionated.
+
+**Verdict:** Reach for this if scene composition and a visual inspector would save meaningful time. Otherwise Three.js has a lighter footprint and wider ecosystem.
+
+---
+
+### 3. Rust + wgpu → WASM
+**Highest GPU sim ceiling; real iteration cost.**
+
+wgpu is the Rust implementation of the WebGPU API — the same spec browsers implement. It compiles to WASM and runs in-browser targeting either WebGPU or WebGL2 as a fallback.
+
+**Not blocked:**
+- WASM runs on iOS Safari, desktop Chrome/Safari — no install required.
+- wgpu's WebGL2 backend covers devices that don't yet support WebGPU.
+- Compute shaders are first-class; this is actually the most ergonomic path to heavy GPU sim (sand automata, fluid, SPH particles) of any option here.
+- Touch/pointer input is wired via `wasm-bindgen` JS interop — verbose but works fine.
+
+**Real costs:**
+- **Iteration speed is the main tax.** Rust recompiles on every change; no hot module reload. Tweaking sand feel or lighting means a 5–30 s compile cycle instead of instant HMR. For a prototype phase where game feel is everything, this adds up.
+- No scene graph, no camera controls, no asset pipeline out of the box — build or find crates (`winit`, `glam`, `wgpu` utilities) for everything Three.js gives for free.
+- WASM binary for a wgpu app runs 3–8 MB before assets; not a blocker but slower first load on mobile than the JS options.
+- `wasm-pack` / `wasm-bindgen` / `trunk` toolchain is mature but more setup than `npm create vite`.
+
+**Verdict:** No hard blockers for browser + mobile deployment. The cost is iteration speed during prototyping — exactly the phase we're in. If GPU simulation is the *core mechanic* (not just a nice-to-have), Rust + wgpu is worth that tax. If sim is secondary to feel and aesthetics, prototype in Three.js and migrate the compute-heavy parts to a WASM module later.
+
+---
+
+### 4. Godot (Web export)
+**Still ruled out.**
+
+- Web exports are 10–30 MB and require HTTPS + SharedArrayBuffer headers.
+- Mobile cold-start conflicts with the playtest goal.
+
+---
+
+## Recommendation
+
+**Three.js + WebGPU renderer + Vite.**
+
+- Three.js for the 3D scene and rendering.
+- Vite for zero-config dev server with HMR; `npm run dev` and open on phone via local IP.
+- WebGPU compute shaders for GPU-based simulation when the time comes; falls back to WebGL fragment shaders in the interim.
+- Rapier (WASM) on standby for rigid-body physics if stones/objects need it.
+
+**If GPU sim is the core mechanic:** Rust + wgpu is viable and has the highest ceiling. Accept the slower iteration loop and lean into it — write the compute pipeline first, get the sim feeling right, then build scene/rendering around it.
+
+**Suggested first step (Three.js path):** spike a Vite scene with a flat sand plane, orbit/touch camera, and a point light. Confirm it feels right on phone before committing to the full architecture.
+
+**Suggested first step (Rust path):** get a WASM build running in the browser with `trunk`, render a flat plane via wgpu, confirm touch input reaches Rust code. That smoke test reveals the real iteration friction before you commit.
+
+---
+
+## Physics / Simulation Add-ons
+
+| Library | Type | Notes |
+|---|---|---|
+| **Rapier (WASM)** | Rigid body | Best perf, pairs with any renderer |
+| **GPU compute shader** | Particle / sand / fluid | WebGPU compute; Chrome + Safari 18+ |
+| **WebGL fragment shader** | Particle / sand | Works everywhere now; lower ceiling |
