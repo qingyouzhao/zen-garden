@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildControlsUI } from './sim-controls.js';
 
 // --- Scene setup ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -34,7 +35,7 @@ const WORLD_SIZE = 14;        // world units
 const CELL_SIZE = WORLD_SIZE / GRID;  // ≈ 0.21875 units
 
 // Repose angle: ~30 degrees → tan(30°) ≈ 0.577
-const TAN_REPOSE = Math.tan(Math.PI / 6);
+let TAN_REPOSE = Math.tan(Math.PI / 6);
 
 // Height array — row-major, index = row * VERTS + col
 const heightmap = new Float32Array(VERTS * VERTS);
@@ -194,8 +195,9 @@ rakeGroup.add(head);
 
 // 5 tines spaced 0.26 apart
 const TINE_OFFSETS = [-2, -1, 0, 1, 2].map(i => i * 0.26);
-const TINE_DEPTH = 0.15;   // how deep the groove is
-const TINE_RADIUS = 0.10;  // world-unit radius of each tine's influence
+let TINE_DEPTH = 0.15;   // how deep the groove is
+let TINE_RADIUS = 0.10;  // world-unit radius of each tine's influence
+let RELAX_ITERS = 4;
 
 for (let i = -2; i <= 2; i++) {
   const tine = new THREE.Mesh(
@@ -359,14 +361,14 @@ window.addEventListener('resize', () => {
 });
 
 // --- Loop ---
-const SETTLE_THRESHOLD = 0.0001;  // stop expanding dirty region when stable
+let SETTLE_THRESHOLD = 0.0001;  // stop expanding dirty region when stable
 
 function animate() {
   requestAnimationFrame(animate);
 
   if (hasDirty()) {
-    // Run 4 relaxation iterations on the dirty region
-    relaxSand(4);
+    // Run relaxation iterations on the dirty region
+    relaxSand(RELAX_ITERS);
 
     // Grow the dirty region each frame so slumping propagates outward
     if (maxTransfer > SETTLE_THRESHOLD) {
@@ -382,3 +384,15 @@ function animate() {
   renderer.render(scene, camera);
 }
 animate();
+
+buildControlsUI([
+  { label: 'Groove Depth',       value: TINE_DEPTH,        min: 0.02, max: 0.4,  step: 0.01,  onChange: v => { TINE_DEPTH        = v; } },
+  { label: 'Groove Width',       value: TINE_RADIUS,       min: 0.03, max: 0.4,  step: 0.01,  onChange: v => { TINE_RADIUS       = v; } },
+  { label: 'Repose Angle',       value: TAN_REPOSE,        min: 0.1,  max: 1.5,  step: 0.05,  onChange: v => { TAN_REPOSE        = v; } },
+  { label: 'Relax Passes',       value: RELAX_ITERS,       min: 1,    max: 10,   step: 1,     onChange: v => { RELAX_ITERS       = Math.round(v); } },
+  { label: 'Settle Threshold',   value: SETTLE_THRESHOLD,  min: 0.00001, max: 0.01, step: 0.00001, onChange: v => { SETTLE_THRESHOLD = v; } },
+], () => {
+  heightmap.fill(0);
+  clearDirty();
+  applyHeightmap();
+});

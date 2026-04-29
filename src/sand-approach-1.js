@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildControlsUI } from './sim-controls.js';
 
 // --- Scene setup ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -100,11 +101,11 @@ rakeGroup.position.set(0, 0, 2);
 scene.add(rakeGroup);
 
 // --- Rake displacement parameters ---
-const GROOVE_DEPTH  = 0.12;   // how deep a tine carves (volume subtracted per tine footprint)
-const GROOVE_RADIUS = 0.8;    // in cell units — radius of the circular tine footprint
-const RIDGE_WIDTH   = 2;      // cells out from tine centre on each perpendicular side
-const MAX_HEIGHT    = 0.35;   // clamp ceiling for piled sand
-const MIN_HEIGHT    = -0.12;  // floor (just below surface)
+let GROOVE_DEPTH  = 0.12;   // how deep a tine carves (volume subtracted per tine footprint)
+let GROOVE_RADIUS = 0.8;    // in cell units — radius of the circular tine footprint
+let RIDGE_WIDTH   = 2;      // cells out from tine centre on each perpendicular side
+let MAX_HEIGHT    = 0.35;   // clamp ceiling for piled sand
+const MIN_HEIGHT  = -0.12;  // floor (just below surface)
 
 /**
  * Apply one rake step.
@@ -286,3 +287,13 @@ function animate() {
   renderer.render(scene, camera);
 }
 animate();
+
+buildControlsUI([
+  { label: 'Groove Depth',  value: GROOVE_DEPTH,  min: 0.01, max: 0.30, step: 0.01, onChange: v => { GROOVE_DEPTH  = v; } },
+  { label: 'Groove Radius', value: GROOVE_RADIUS, min: 0.2,  max: 2.0,  step: 0.1,  onChange: v => { GROOVE_RADIUS = v; } },
+  { label: 'Ridge Width',   value: RIDGE_WIDTH,   min: 1,    max: 6,    step: 1,    onChange: v => { RIDGE_WIDTH   = v; } },
+  { label: 'Max Pile',      value: MAX_HEIGHT,    min: 0.1,  max: 0.8,  step: 0.05, onChange: v => { MAX_HEIGHT    = v; } },
+], () => {
+  heightmap.fill(0);
+  flushHeightmap();
+});

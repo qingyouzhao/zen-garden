@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildControlsUI } from './sim-controls.js';
 
 // --- Renderer ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -67,6 +68,10 @@ const simFrag = /* glsl */`
   uniform vec2 uTines[5];
   uniform float uRakeActive;
   uniform float uDelta;
+  uniform float uRepose;
+  uniform float uGrooveStrength;
+  uniform float uRidgeStrength;
+  uniform float uFlowScale;
   varying vec2 vUv;
 
   void main() {
@@ -79,21 +84,20 @@ const simFrag = /* glsl */`
     float hE = texture2D(uHeightmap, uv + vec2(texel.x, 0.0)).r;
     float hW = texture2D(uHeightmap, uv - vec2(texel.x, 0.0)).r;
 
-    float repose = 0.15;
     // Inflow from higher neighbors
     float flow = 0.0;
-    flow += max(0.0, (hN - h) - repose) * 0.25;
-    flow += max(0.0, (hS - h) - repose) * 0.25;
-    flow += max(0.0, (hE - h) - repose) * 0.25;
-    flow += max(0.0, (hW - h) - repose) * 0.25;
+    flow += max(0.0, (hN - h) - uRepose) * 0.25;
+    flow += max(0.0, (hS - h) - uRepose) * 0.25;
+    flow += max(0.0, (hE - h) - uRepose) * 0.25;
+    flow += max(0.0, (hW - h) - uRepose) * 0.25;
     // Outflow to lower neighbors
     float outflow = 0.0;
-    outflow += max(0.0, (h - hN) - repose) * 0.25;
-    outflow += max(0.0, (h - hS) - repose) * 0.25;
-    outflow += max(0.0, (h - hE) - repose) * 0.25;
-    outflow += max(0.0, (h - hW) - repose) * 0.25;
+    outflow += max(0.0, (h - hN) - uRepose) * 0.25;
+    outflow += max(0.0, (h - hS) - uRepose) * 0.25;
+    outflow += max(0.0, (h - hE) - uRepose) * 0.25;
+    outflow += max(0.0, (h - hW) - uRepose) * 0.25;
 
-    h += (flow - outflow) * uDelta * 60.0;
+    h += (flow - outflow) * uDelta * uFlowScale;
 
     // Rake displacement
     if (uRakeActive > 0.5) {
@@ -101,8 +105,8 @@ const simFrag = /* glsl */`
         float dist = length(uv - uTines[i]);
         float groove = smoothstep(0.012, 0.005, dist);
         float ridge  = smoothstep(0.025, 0.015, dist) - smoothstep(0.015, 0.008, dist);
-        h -= groove * 0.08;
-        h += ridge  * 0.04;
+        h -= groove * uGrooveStrength;
+        h += ridge  * uRidgeStrength;
       }
     }
 
@@ -125,6 +129,10 @@ const simMaterial = new THREE.ShaderMaterial({
     ]},
     uRakeActive: { value: 0.0 },
     uDelta: { value: 0.016 },
+    uRepose:         { value: 0.15 },
+    uGrooveStrength: { value: 0.08 },
+    uRidgeStrength:  { value: 0.04 },
+    uFlowScale:      { value: 60.0 },
   },
   depthTest: false,
   depthWrite: false,
@@ -350,3 +358,17 @@ function animate() {
 }
 
 animate();
+
+buildControlsUI([
+  { label: 'Repose Slope',    value: 0.15, min: 0.02, max: 0.5,  step: 0.01,  onChange: v => { simMaterial.uniforms.uRepose.value        = v; } },
+  { label: 'Groove Depth',    value: 0.08, min: 0.01, max: 0.25, step: 0.01,  onChange: v => { simMaterial.uniforms.uGrooveStrength.value = v; } },
+  { label: 'Ridge Height',    value: 0.04, min: 0.01, max: 0.15, step: 0.005, onChange: v => { simMaterial.uniforms.uRidgeStrength.value  = v; } },
+  { label: 'Flow Speed',      value: 60,   min: 10,   max: 120,  step: 5,     onChange: v => { simMaterial.uniforms.uFlowScale.value      = v; } },
+], () => {
+  // Re-seed both render targets from initTex
+  renderer.setRenderTarget(rtB);
+  simMaterial.uniforms.uHeightmap.value = initTex;
+  renderer.render(simScene, simCamera);
+  renderer.setRenderTarget(null);
+  [rtA, rtB] = [rtB, rtA];
+});
