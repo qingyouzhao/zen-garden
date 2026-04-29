@@ -111,6 +111,24 @@
       <div class="option-desc">WebGPU / WebGL2 compute sand simulation with GLSL ping-pong fallback for older devices.</div>
       <span class="option-tag">webgpu · webgl2</span>
     </a>
+
+    <a class="option" href="/zen-garden/sand-approach-1.html">
+      <div class="option-title">Heightmap Sand</div>
+      <div class="option-desc">128×128 CPU heightmap with conserved-volume rake displacement. Grooves deposit exact volume into ridges perpendicular to travel.</div>
+      <span class="option-tag">cpu · volume-conserved</span>
+    </a>
+
+    <a class="option" href="/zen-garden/sand-approach-2.html">
+      <div class="option-title">Cellular Automaton Sand</div>
+      <div class="option-desc">64×64 grid with 4-iteration Gauss-Seidel repose-angle relaxation. Piles slump naturally; grooves widen and flatten over time.</div>
+      <span class="option-tag">cpu · repose-angle</span>
+    </a>
+
+    <a class="option" href="/zen-garden/sand-approach-3.html">
+      <div class="option-title">GPU Ping-Pong Sand</div>
+      <div class="option-desc">256×256 heightmap simulated entirely in a fragment shader. Repose-angle flow and groove carving run in parallel on the GPU each frame.</div>
+      <span class="option-tag">gpu · shader-displacement</span>
+    </a>
   </div>
 
   <footer>no win conditions — only presence</footer>
