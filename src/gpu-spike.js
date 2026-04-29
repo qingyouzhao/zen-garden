@@ -464,7 +464,7 @@ function buildRake() {
     new THREE.MeshLambertMaterial({ color: 0x8b5e3c })
   );
   handle.rotation.x = Math.PI / 4;
-  handle.position.set(0, 0.9, -0.6);
+  handle.position.set(0, 1.327, 1.237);
   g.add(handle);
 
   const head = new THREE.Mesh(
