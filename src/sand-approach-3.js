@@ -304,9 +304,9 @@ window.addEventListener('resize', () => {
 });
 
 // --- UV helper: world (x, z) → UV [0,1]² ---
-// Sand is 14×14 centered at origin, so u = (x + 7) / 14, v = (z + 7) / 14
+// After rotateX(-PI/2): UV-U → world +X, UV-V → world -Z, so V must be inverted.
 function worldToUV(x, z) {
-  return new THREE.Vector2((x + 7) / 14, (z + 7) / 14);
+  return new THREE.Vector2((x + 7) / 14, (7 - z) / 14);
 }
 
 // --- Animation loop ---
