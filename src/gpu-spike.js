@@ -83,6 +83,9 @@ async function buildTSLScene() {
   // Uniforms: rake world-space XZ position and normalised movement direction
   const uRakePos = uniform(new THREE.Vector2(9999, 9999));
   const uRakeDir = uniform(new THREE.Vector2(1, 0));
+  const uPushStrength  = uniform(PUSH_STRENGTH);
+  const uRakeRadiusU   = uniform(RAKE_RADIUS);
+  const uTineRU        = uniform(TINE_R);
 
   // -------------------------------------------------------------------------
   // Compute shader (TSL Fn) — tine-aware influence
@@ -109,7 +112,7 @@ async function buildTSLScene() {
 
     // Bounding gate: skip particles outside overall rake radius
     const dist = dx.mul(dx).add(dz.mul(dz)).sqrt();
-    const gate = smoothstep(float(RAKE_RADIUS), float(0.0), dist);
+    const gate = smoothstep(uRakeRadiusU, float(0.0), dist);
 
     // Project onto rake-perpendicular axis (= along the rake head width)
     // rakePerp = (-rakeDir.z, rakeDir.x) in XZ terms stored as (y, x)
@@ -119,12 +122,12 @@ async function buildTSLScene() {
     const tineInf = float(0.0).toVar();
     for (const tOff of TINE_OFFSETS) {
       const d = dPerp.sub(float(tOff)).abs();
-      tineInf.assign(tineInf.max(smoothstep(float(TINE_R), float(0.0), d)));
+      tineInf.assign(tineInf.max(smoothstep(uTineRU, float(0.0), d)));
     }
 
     const influence = tineInf.mul(gate);
     const disp = dispBuffer.element(idx);
-    disp.assign(clamp(disp.add(influence.mul(float(PUSH_STRENGTH))), float(0.0), float(1.0)));
+    disp.assign(clamp(disp.add(influence.mul(uPushStrength)), float(0.0), float(1.0)));
   })().compute(COUNT, [64]);
 
   // Reusable compute kernel to zero all displacements
@@ -201,6 +204,13 @@ async function buildTSLScene() {
 
   document.getElementById('clear-btn').addEventListener('click', () => {
     renderer.computeAsync(clearCompute);
+  });
+
+  buildGPUSpikeUI({
+    onPushStrength:  v => { uPushStrength.value  = v; },
+    onRakeRadius:    v => { uRakeRadiusU.value    = v; },
+    onTineWidth:     v => { uTineRU.value         = v; },
+    onClear: () => { renderer.computeAsync(clearCompute); },
   });
 
   // Input — also receives normalised movement direction for tine orientation
@@ -422,6 +432,19 @@ function buildGLSLFallback() {
     renderer.setRenderTarget(null);
   });
 
+  buildGPUSpikeUI({
+    onPushStrength:  v => { simMat.uniforms.uPush.value  = v; },
+    onRakeRadius:    v => { simMat.uniforms.uRakeR.value  = v / (EXTENT * 2); },
+    onTineWidth:     v => { simMat.uniforms.uTineR.value  = v / (EXTENT * 2); },
+    onClear: () => {
+      renderer.setRenderTarget(rtA);
+      renderer.render(clearScene, simCamera);
+      renderer.setRenderTarget(rtB);
+      renderer.render(clearScene, simCamera);
+      renderer.setRenderTarget(null);
+    },
+  });
+
   const { onDown, onMove, onUp } = buildInput(camera, rakeGroup, (wx, wz, dx, dz) => {
     simMat.uniforms.uRakePos.value.set(
       (wx + EXTENT) / (EXTENT * 2),
@@ -467,6 +490,118 @@ function buildGLSLFallback() {
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
+
+function buildGPUSpikeUI({ onPushStrength, onRakeRadius, onTineWidth, onClear }) {
+  const style = document.createElement('style');
+  style.textContent = `
+    #sim-controls {
+      position: fixed; bottom: 20px; right: 16px; z-index: 100;
+      font-family: system-ui, sans-serif; user-select: none;
+    }
+    #sim-toggle {
+      display: block; margin-left: auto;
+      width: 52px; height: 52px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(14,13,11,0.88); color: #e8dcc8;
+      font-size: 22px; cursor: pointer; touch-action: manipulation;
+    }
+    #sim-panel {
+      display: none; margin-bottom: 10px;
+      background: rgba(14,13,11,0.92); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; padding: 18px 16px; min-width: 220px;
+      touch-action: pan-y;
+    }
+    #sim-panel.open { display: block; }
+    .sim-row { margin-bottom: 16px; }
+    .sim-row-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      color: #e8dcc8; font-size: 11px; letter-spacing: 0.05em;
+      text-transform: uppercase; margin-bottom: 6px; opacity: 0.75;
+    }
+    .sim-val { font-variant-numeric: tabular-nums; opacity: 0.55; }
+    .sim-row input[type=range] {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 32px; background: transparent;
+      cursor: pointer; touch-action: pan-x;
+    }
+    .sim-row input[type=range]::-webkit-slider-runnable-track {
+      height: 3px; background: rgba(255,255,255,0.2); border-radius: 2px;
+    }
+    .sim-row input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 22px; height: 22px;
+      margin-top: -9px; border-radius: 50%; background: #c8b89a; border: none;
+    }
+    .sim-row input[type=range]::-moz-range-track {
+      height: 3px; background: rgba(255,255,255,0.2);
+    }
+    .sim-row input[type=range]::-moz-range-thumb {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #c8b89a; border: none;
+    }
+    #sim-reset {
+      width: 100%; padding: 12px; margin-top: 4px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.05); color: #e8dcc8;
+      font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+      cursor: pointer; touch-action: manipulation;
+    }
+    #sim-reset:active { background: rgba(255,255,255,0.12); }
+  `;
+  document.head.appendChild(style);
+
+  const params = [
+    { label: 'Push Strength', value: PUSH_STRENGTH, min: 0.01, max: 0.5,  step: 0.01, decimals: 2, onChange: onPushStrength },
+    { label: 'Rake Radius',   value: RAKE_RADIUS,   min: 0.1,  max: 2.0,  step: 0.05, decimals: 2, onChange: onRakeRadius   },
+    { label: 'Tine Width',    value: TINE_R,        min: 0.01, max: 0.3,  step: 0.01, decimals: 2, onChange: onTineWidth    },
+  ];
+
+  const root  = document.createElement('div');
+  root.id = 'sim-controls';
+  const panel = document.createElement('div');
+  panel.id = 'sim-panel';
+
+  for (const p of params) {
+    const row = document.createElement('div');
+    row.className = 'sim-row';
+
+    const valSpan = document.createElement('span');
+    valSpan.className = 'sim-val';
+    valSpan.textContent = p.value.toFixed(p.decimals);
+
+    const head = document.createElement('div');
+    head.className = 'sim-row-head';
+    head.append(
+      Object.assign(document.createElement('span'), { textContent: p.label }),
+      valSpan
+    );
+
+    const input = document.createElement('input');
+    Object.assign(input, { type: 'range', min: p.min, max: p.max, step: p.step, value: p.value });
+    input.addEventListener('input', () => {
+      const v = parseFloat(input.value);
+      p.onChange(v);
+      valSpan.textContent = v.toFixed(p.decimals);
+    });
+
+    row.append(head, input);
+    panel.appendChild(row);
+  }
+
+  const resetBtn = document.createElement('button');
+  resetBtn.id = 'sim-reset';
+  resetBtn.textContent = 'Clear Sand';
+  resetBtn.addEventListener('click', onClear);
+  panel.appendChild(resetBtn);
+
+  const toggle = document.createElement('button');
+  toggle.id = 'sim-toggle';
+  toggle.setAttribute('aria-label', 'Toggle controls');
+  toggle.textContent = '⚙';
+  toggle.addEventListener('click', () => panel.classList.toggle('open'));
+
+  root.append(panel, toggle);
+  document.body.appendChild(root);
+}
 
 function makeStone() {
   const m = new THREE.Mesh(
