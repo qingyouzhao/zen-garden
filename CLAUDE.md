@@ -62,6 +62,14 @@ npm run build      # production bundle → dist/
 
 No local server needed to playtest on phone — just open that URL.
 
+## Code Design
+
+**Modular** — one responsibility per file. Split when a file handles more than one concern or exceeds ~200 lines — small files make parallel edits safe and diffs readable. Keep functions under ~50 lines — if a function needs a scroll to read, it's doing too much. Each module should be replaceable without touching others. Boundaries are load-bearing: `scene.js`, `rake.js`, `input.js` are the model — not a catch-all `utils.js`.
+
+**Minimal** — write the least code that solves the problem. Nothing speculative. No abstractions for single-use code. No error handling for impossible scenarios. No features beyond what was explicitly requested. Ask: *could this be half as long and still work?* If yes, cut it.
+
+**Self-check before committing:** Would a senior engineer call this overcomplicated? If yes, simplify. Touch only what the task requires — don't refactor adjacent code or add future-proofing.
+
 ## Architecture
 
 Everything currently lives in `src/main.js` (single-file prototype). Split into modules as the codebase grows — suggested boundaries: `scene.js` (Three.js setup), `rake.js` (rake mesh + drag logic), `input.js` (pointer/touch abstraction).
