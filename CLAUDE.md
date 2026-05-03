@@ -64,7 +64,7 @@ No local server needed to playtest on phone — just open that URL.
 
 ## Code Design
 
-**Modular** — one responsibility per file. Split when a file handles more than one concern. Keep functions under ~50 lines — if a function needs a scroll to read, it's doing too much. Each module should be replaceable without touching others. Boundaries are load-bearing: `scene.js`, `rake.js`, `input.js` are the model — not a catch-all `utils.js`.
+**Modular** — one responsibility per file. Split when a file handles more than one concern or exceeds ~200 lines — small files make parallel edits safe and diffs readable. Keep functions under ~50 lines — if a function needs a scroll to read, it's doing too much. Each module should be replaceable without touching others. Boundaries are load-bearing: `scene.js`, `rake.js`, `input.js` are the model — not a catch-all `utils.js`.
 
 **Minimal** — write the least code that solves the problem. Nothing speculative. No abstractions for single-use code. No error handling for impossible scenarios. No features beyond what was explicitly requested. Ask: *could this be half as long and still work?* If yes, cut it.
 
