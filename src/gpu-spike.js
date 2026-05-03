@@ -25,6 +25,9 @@ import {
   vec3, vec4, float,
   mix, clamp, smoothstep,
 } from 'three/tsl';
+import { makeStone } from './stone.js';
+import { buildRake } from './rake.js';
+import { createPointerInput } from './input.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -35,18 +38,17 @@ const COUNT   = GRID * GRID;            // 65 536 particles
 const EXTENT  = 7.0;                    // half-width of sand area, world units
 
 // Pointy-top hex grid geometry
-const HEX_R  = (EXTENT * 2) / GRID / Math.sqrt(3); // circumradius of each hex tile
-const H_STEP = HEX_R * Math.sqrt(3);               // horizontal centre-to-centre
-const V_STEP = HEX_R * 1.5;                         // vertical centre-to-centre
+const HEX_R  = (EXTENT * 2) / GRID / Math.sqrt(3);
+const H_STEP = HEX_R * Math.sqrt(3);
+const V_STEP = HEX_R * 1.5;
 
-const RAKE_RADIUS   = 0.7;  // overall bounding radius around rake head centre
+const RAKE_RADIUS   = 0.7;
 const PUSH_STRENGTH = 0.12;
-const TINE_OFFSETS  = [-0.52, -0.26, 0.0, 0.26, 0.52]; // world units along rake width
-const TINE_R        = 0.07; // half-width of each tine groove in world units
+const TINE_OFFSETS  = [-0.52, -0.26, 0.0, 0.26, 0.52];
+const TINE_R        = 0.07;
 
 // ---------------------------------------------------------------------------
-// TSL / WebGPU path (works on WebGPU natively; falls back to WebGL2 via
-// transform feedback when navigator.gpu is absent)
+// TSL / WebGPU path
 // ---------------------------------------------------------------------------
 
 async function buildTSLScene() {
@@ -60,7 +62,6 @@ async function buildTSLScene() {
   const backendLabel = isWebGPU ? 'WebGPU compute' : 'WebGL2 transform feedback';
   document.querySelector('#info span').textContent = `drag to rake  |  ${backendLabel}  |  -- fps`;
 
-  // Scene / Camera / Lights
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1a1612);
   scene.fog = new THREE.Fog(0x1a1612, 20, 40);
@@ -74,24 +75,13 @@ async function buildTSLScene() {
   sun.position.set(5, 12, 8);
   scene.add(sun);
 
-  // -------------------------------------------------------------------------
   // GPU storage buffer: one float per particle [0..1]
-  // 0 = flat undisturbed sand, 1 = deepest groove
-  // -------------------------------------------------------------------------
   const dispBuffer = instancedArray(COUNT, 'float');
 
-  // Uniforms: rake world-space XZ position and normalised movement direction
   const uRakePos = uniform(new THREE.Vector2(9999, 9999));
   const uRakeDir = uniform(new THREE.Vector2(1, 0));
 
-  // -------------------------------------------------------------------------
   // Compute shader (TSL Fn) — tine-aware influence
-  // -------------------------------------------------------------------------
-  // Each frame: for every particle, project its offset from the rake centre
-  // onto the axis perpendicular to movement (= along the rake head width).
-  // Only the 5 narrow strips that correspond to actual tine positions receive
-  // displacement, producing parallel grooves rather than a circular smear.
-
   const sandCompute = Fn(() => {
     const idx = instanceIndex;
 
@@ -107,15 +97,11 @@ async function buildTSLScene() {
     const dx = px.sub(uRakePos.x);
     const dz = pz.sub(uRakePos.y);
 
-    // Bounding gate: skip particles outside overall rake radius
     const dist = dx.mul(dx).add(dz.mul(dz)).sqrt();
     const gate = smoothstep(float(RAKE_RADIUS), float(0.0), dist);
 
-    // Project onto rake-perpendicular axis (= along the rake head width)
-    // rakePerp = (-rakeDir.z, rakeDir.x) in XZ terms stored as (y, x)
     const dPerp = dx.mul(uRakeDir.y.negate()).add(dz.mul(uRakeDir.x));
 
-    // Max influence across all 5 tines
     const tineInf = float(0.0).toVar();
     for (const tOff of TINE_OFFSETS) {
       const d = dPerp.sub(float(tOff)).abs();
@@ -127,40 +113,28 @@ async function buildTSLScene() {
     disp.assign(clamp(disp.add(influence.mul(float(PUSH_STRENGTH))), float(0.0), float(1.0)));
   })().compute(COUNT, [64]);
 
-  // Reusable compute kernel to zero all displacements
   const clearCompute = Fn(() => {
     dispBuffer.element(instanceIndex).assign(float(0.0));
   })().compute(COUNT, [64]);
 
-  // Zero-initialise all displacements on load
   await renderer.computeAsync(clearCompute);
 
-  // -------------------------------------------------------------------------
   // Particle rendering
-  // -------------------------------------------------------------------------
-  // InstancedMesh with flat PlaneGeometry tiles.
-  // All instance matrices are identity — the vertexNode derives world position
-  // from instanceIndex + dispBuffer, so the instance matrix plays no role.
-
   const sandMat = new THREE.NodeMaterial();
   sandMat.side = THREE.DoubleSide;
 
-  // Vertex shader: reconstruct hex tile world-pos from instanceIndex, project
   sandMat.vertexNode = Fn(() => {
     const idx = instanceIndex;
     const col = idx.modInt(GRID);
     const row = idx.div(GRID);
 
-    // Match hex positioning from compute shader
     const isOdd = row.modInt(2).toFloat();
     const px = col.toFloat().mul(float(H_STEP))
       .add(isOdd.mul(float(H_STEP * 0.5)))
       .sub(float(EXTENT));
     const pz = row.toFloat().mul(float(V_STEP)).sub(float(EXTENT));
-    const py = dispBuffer.element(idx).mul(float(-0.18));  // grooves dip below y=0
+    const py = dispBuffer.element(idx).mul(float(-0.18));
 
-    // positionGeometry provides per-vertex local offsets within the hex tile.
-    // CircleGeometry.rotateX(-PI/2): local X → world X, local Y → world Z.
     const worldPos = vec3(
       px.add(positionGeometry.x),
       py,
@@ -170,7 +144,6 @@ async function buildTSLScene() {
     return cameraProjectionMatrix.mul(modelViewMatrix.mul(vec4(worldPos, float(1.0))));
   })();
 
-  // Fragment shader: sand colour (#c8b89a) → groove colour (#5a4022)
   const sandColor   = vec3(float(0.784), float(0.722), float(0.604));
   const grooveColor = vec3(float(0.353), float(0.251), float(0.133));
 
@@ -180,7 +153,7 @@ async function buildTSLScene() {
   })();
 
   const tileGeo = new THREE.CircleGeometry(HEX_R * 0.97, 6);
-  tileGeo.rotateX(-Math.PI / 2); // lay flat in XZ plane; pointy-top orientation
+  tileGeo.rotateX(-Math.PI / 2);
 
   const particles = new THREE.InstancedMesh(tileGeo, sandMat, COUNT);
   particles.frustumCulled = false;
@@ -193,7 +166,6 @@ async function buildTSLScene() {
   particles.instanceMatrix.needsUpdate = true;
   scene.add(particles);
 
-  // Stone + rake
   scene.add(makeStone());
   const rakeGroup = buildRake();
   rakeGroup.position.set(0, 0, 2);
@@ -203,12 +175,18 @@ async function buildTSLScene() {
     renderer.computeAsync(clearCompute);
   });
 
-  // Input — also receives normalised movement direction for tine orientation
-  const { onDown, onMove, onUp } = buildInput(camera, rakeGroup, (wx, wz, dx, dz) => {
-    uRakePos.value.set(wx, wz);
-    uRakeDir.value.set(dx, dz);
+  let lastDir = { x: 1, z: 0 };
+
+  createPointerInput(camera, renderer.domElement, {
+    onMove(x, z, dx, dz) {
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len > 0.001) lastDir = { x: dx / len, z: dz / len };
+      rakeGroup.position.set(x, 0, z);
+      rakeGroup.rotation.y = Math.atan2(lastDir.x, lastDir.z);
+      uRakePos.value.set(x, z);
+      uRakeDir.value.set(lastDir.x, lastDir.z);
+    },
   });
-  attachEvents(renderer.domElement, onDown, onMove, onUp);
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -216,7 +194,6 @@ async function buildTSLScene() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  // Render loop
   let lastTime = performance.now();
   let frames   = 0;
   const fpsLabel = document.querySelector('#info span');
@@ -238,15 +215,11 @@ async function buildTSLScene() {
 // ---------------------------------------------------------------------------
 // GLSL ping-pong fallback (WebGL1 / old browsers without transform feedback)
 // ---------------------------------------------------------------------------
-// Uses two WebGLRenderTargets as state textures (128x128, R channel = displacement).
-// A fullscreen-quad fragment shader steps the simulation, instanced tiles display it.
-// Activated only if WebGPURenderer.init() throws (very unusual in 2025).
 
 function buildGLSLFallback() {
   document.getElementById('fallback-banner').style.display = 'block';
   document.querySelector('#info span').textContent = 'drag to rake  |  GLSL ping-pong  |  -- fps';
 
-  // Import standard renderer via the global THREE namespace which three/webgpu bundles
   const canvas = document.createElement('canvas');
   const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
   if (!gl) {
@@ -255,14 +228,11 @@ function buildGLSLFallback() {
     return;
   }
 
-  // Create a plain WebGL renderer by abusing WebGPURenderer with forceWebGL
   const renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL: true });
-  // Note: forceWebGL mode does NOT require await renderer.init() for basic rendering
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.insertBefore(renderer.domElement, document.getElementById('info'));
 
-  // Ping-pong targets
   const rtOpts = {
     minFilter:   THREE.NearestFilter,
     magFilter:   THREE.NearestFilter,
@@ -273,11 +243,10 @@ function buildGLSLFallback() {
   let rtA = new THREE.WebGLRenderTarget(GRID, GRID, rtOpts);
   let rtB = new THREE.WebGLRenderTarget(GRID, GRID, rtOpts);
 
-  // Simulation step (fullscreen quad, GLSL fragment shader)
   const simScene  = new THREE.Scene();
   const simCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-  const TINE_SPACING_UV = 0.26 / (EXTENT * 2); // tine spacing in UV space
+  const TINE_SPACING_UV = 0.26 / (EXTENT * 2);
   const TINE_R_UV       = TINE_R / (EXTENT * 2);
   const RAKE_R_UV       = RAKE_RADIUS / (EXTENT * 2);
 
@@ -312,7 +281,6 @@ function buildGLSLFallback() {
         float dist = length(d);
         float gate = 1.0 - smoothstep(0.0, uRakeR, dist);
 
-        // Project onto rake-perpendicular axis
         vec2  perp = vec2(-uRakeDir.y, uRakeDir.x);
         float dPerp = dot(d, perp);
 
@@ -330,7 +298,6 @@ function buildGLSLFallback() {
   });
   simScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), simMat));
 
-  // Display scene
   const scene  = new THREE.Scene();
   scene.background = new THREE.Color(0x1a1612);
   scene.fog = new THREE.Fog(0x1a1612, 20, 40);
@@ -406,7 +373,6 @@ function buildGLSLFallback() {
   rakeGroup.position.set(0, 0, 2);
   scene.add(rakeGroup);
 
-  // Zero-output quad used by the clear button to wipe both ping-pong targets
   const clearScene  = new THREE.Scene();
   const clearMat    = new THREE.ShaderMaterial({
     vertexShader:   'void main(){gl_Position=vec4(position.xy,0.0,1.0);}',
@@ -422,14 +388,21 @@ function buildGLSLFallback() {
     renderer.setRenderTarget(null);
   });
 
-  const { onDown, onMove, onUp } = buildInput(camera, rakeGroup, (wx, wz, dx, dz) => {
-    simMat.uniforms.uRakePos.value.set(
-      (wx + EXTENT) / (EXTENT * 2),
-      (wz + EXTENT) / (EXTENT * 2)
-    );
-    simMat.uniforms.uRakeDir.value.set(dx, dz);
+  let lastDir = { x: 1, z: 0 };
+
+  createPointerInput(camera, renderer.domElement, {
+    onMove(x, z, dx, dz) {
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len > 0.001) lastDir = { x: dx / len, z: dz / len };
+      rakeGroup.position.set(x, 0, z);
+      rakeGroup.rotation.y = Math.atan2(lastDir.x, lastDir.z);
+      simMat.uniforms.uRakePos.value.set(
+        (x + EXTENT) / (EXTENT * 2),
+        (z + EXTENT) / (EXTENT * 2)
+      );
+      simMat.uniforms.uRakeDir.value.set(lastDir.x, lastDir.z);
+    },
   });
-  attachEvents(renderer.domElement, onDown, onMove, onUp);
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -462,109 +435,6 @@ function buildGLSLFallback() {
     }
   }
   animate();
-}
-
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
-
-function makeStone() {
-  const m = new THREE.Mesh(
-    new THREE.BoxGeometry(1.2, 0.7, 1.0),
-    new THREE.MeshLambertMaterial({ color: 0x666055 })
-  );
-  m.position.set(1.5, 0.35, 0.5);
-  return m;
-}
-
-function buildRake() {
-  const g = new THREE.Group();
-
-  const handle = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04, 0.04, 3.5, 8),
-    new THREE.MeshLambertMaterial({ color: 0x8b5e3c })
-  );
-  handle.rotation.x = Math.PI / 4;
-  handle.position.set(0, 1.327, 1.237);
-  g.add(handle);
-
-  const head = new THREE.Mesh(
-    new THREE.BoxGeometry(1.2, 0.06, 0.12),
-    new THREE.MeshLambertMaterial({ color: 0x6b4c2a })
-  );
-  head.position.y = 0.06;
-  g.add(head);
-
-  for (let i = -2; i <= 2; i++) {
-    const tine = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.025, 0.015, 0.22, 6),
-      new THREE.MeshLambertMaterial({ color: 0x5a3e20 })
-    );
-    tine.position.set(i * 0.26, -0.09, 0);
-    g.add(tine);
-  }
-  return g;
-}
-
-function buildInput(camera, rakeGroup, onRakeMove) {
-  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-  const raycaster   = new THREE.Raycaster();
-  const pointer     = new THREE.Vector2();
-  const target      = new THREE.Vector3();
-  let dragging  = false;
-  let prevWorld = null;
-  let lastDir   = { x: 1, z: 0 }; // default direction until first move
-
-  function updatePointer(cx, cy) {
-    pointer.x = (cx / window.innerWidth)  *  2 - 1;
-    pointer.y = (cy / window.innerHeight) * -2 + 1;
-  }
-
-  function onDown(cx, cy) {
-    dragging = true;
-    prevWorld = null;
-    updatePointer(cx, cy);
-  }
-
-  function onMove(cx, cy) {
-    if (!dragging) return;
-    updatePointer(cx, cy);
-    raycaster.setFromCamera(pointer, camera);
-    raycaster.ray.intersectPlane(groundPlane, target);
-    target.x = Math.max(-EXTENT, Math.min(EXTENT, target.x));
-    target.z = Math.max(-EXTENT, Math.min(EXTENT, target.z));
-    rakeGroup.position.set(target.x, 0, target.z);
-
-    if (prevWorld) {
-      const ddx = target.x - prevWorld.x;
-      const ddz = target.z - prevWorld.z;
-      const len = Math.sqrt(ddx * ddx + ddz * ddz);
-      if (len > 0.001) lastDir = { x: ddx / len, z: ddz / len };
-    }
-    prevWorld = { x: target.x, z: target.z };
-
-    rakeGroup.rotation.y = Math.atan2(lastDir.x, lastDir.z);
-    onRakeMove(target.x, target.z, lastDir.x, lastDir.z);
-  }
-
-  function onUp() { dragging = false; prevWorld = null; }
-
-  return { onDown, onMove, onUp };
-}
-
-function attachEvents(el, onDown, onMove, onUp) {
-  el.addEventListener('mousedown',  e => onDown(e.clientX, e.clientY));
-  el.addEventListener('mousemove',  e => onMove(e.clientX, e.clientY));
-  el.addEventListener('mouseup',    () => onUp());
-  el.addEventListener('touchstart', e => {
-    e.preventDefault();
-    onDown(e.touches[0].clientX, e.touches[0].clientY);
-  }, { passive: false });
-  el.addEventListener('touchmove',  e => {
-    e.preventDefault();
-    onMove(e.touches[0].clientX, e.touches[0].clientY);
-  }, { passive: false });
-  el.addEventListener('touchend', () => onUp());
 }
 
 // ---------------------------------------------------------------------------
