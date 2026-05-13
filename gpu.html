@@ -60,6 +60,30 @@
     }
     #clear-btn:hover { opacity: 1; }
     #clear-btn:active { opacity: 0.5; }
+    #controls {
+      position: fixed;
+      top: 70px;
+      left: 14px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 4px;
+      padding: 10px 14px;
+      color: #e8dcc8;
+      font-family: system-ui, sans-serif;
+      font-size: 11px;
+      min-width: 190px;
+      user-select: none;
+      line-height: 1.5;
+    }
+    #controls label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+    #controls input[type=range] { flex: 1; accent-color: #c8b89a; }
+    #controls span { min-width: 32px; text-align: right; opacity: 0.7; }
     #fallback-banner {
       display: none;
       position: fixed;
@@ -80,11 +104,30 @@
     Zen Garden — GPU Spike
     <span>drag to rake  |  detecting renderer...</span>
   </div>
+  <div id="controls">
+    <label>rake radius <input id="s-rake" type="range" min="0.1" max="2.0" step="0.1" value="0.7"><span id="v-rake">0.7</span></label>
+    <label>push strength <input id="s-push" type="range" min="0.01" max="0.5" step="0.01" value="0.12"><span id="v-push">0.12</span></label>
+    <label>tine radius <input id="s-tine" type="range" min="0.01" max="0.3" step="0.01" value="0.07"><span id="v-tine">0.07</span></label>
+  </div>
   <a id="back" href="/zen-garden/">← back</a>
   <button id="clear-btn">clear</button>
   <div id="fallback-banner">
     WebGPU/WebGL2 compute unavailable — using GLSL ping-pong fallback
   </div>
   <script type="module" src="/src/gpu-spike.js"></script>
+  <script>
+    function wire() {
+      if (!window.__sandControls) { setTimeout(wire, 50); return; }
+      const c = window.__sandControls;
+      function bind(sid, vid, setter, fmt) {
+        const s = document.getElementById(sid), v = document.getElementById(vid);
+        s.addEventListener('input', () => { const n = +s.value; setter(n); v.textContent = fmt(n); });
+      }
+      bind('s-rake', 'v-rake', c.setRakeRadius,   n => n.toFixed(1));
+      bind('s-push', 'v-push', c.setPushStrength, n => n.toFixed(2));
+      bind('s-tine', 'v-tine', c.setTineRadius,   n => n.toFixed(2));
+    }
+    wire();
+  </script>
 </body>
 </html>

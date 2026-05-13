@@ -42,10 +42,10 @@ const HEX_R  = (EXTENT * 2) / GRID / Math.sqrt(3);
 const H_STEP = HEX_R * Math.sqrt(3);
 const V_STEP = HEX_R * 1.5;
 
-const RAKE_RADIUS   = 0.7;
-const PUSH_STRENGTH = 0.12;
+let RAKE_RADIUS   = 0.7;
+let PUSH_STRENGTH = 0.12;
 const TINE_OFFSETS  = [-0.52, -0.26, 0.0, 0.26, 0.52];
-const TINE_R        = 0.07;
+let TINE_R        = 0.07;
 
 // ---------------------------------------------------------------------------
 // TSL / WebGPU path
@@ -78,8 +78,11 @@ async function buildTSLScene() {
   // GPU storage buffer: one float per particle [0..1]
   const dispBuffer = instancedArray(COUNT, 'float');
 
-  const uRakePos = uniform(new THREE.Vector2(9999, 9999));
-  const uRakeDir = uniform(new THREE.Vector2(1, 0));
+  const uRakePos      = uniform(new THREE.Vector2(9999, 9999));
+  const uRakeDir      = uniform(new THREE.Vector2(1, 0));
+  const uRakeRadius   = uniform(RAKE_RADIUS);
+  const uPushStrength = uniform(PUSH_STRENGTH);
+  const uTineR        = uniform(TINE_R);
 
   // Compute shader (TSL Fn) — tine-aware influence
   const sandCompute = Fn(() => {
@@ -98,19 +101,19 @@ async function buildTSLScene() {
     const dz = pz.sub(uRakePos.y);
 
     const dist = dx.mul(dx).add(dz.mul(dz)).sqrt();
-    const gate = smoothstep(float(RAKE_RADIUS), float(0.0), dist);
+    const gate = smoothstep(uRakeRadius, float(0.0), dist);
 
     const dPerp = dx.mul(uRakeDir.y.negate()).add(dz.mul(uRakeDir.x));
 
     const tineInf = float(0.0).toVar();
     for (const tOff of TINE_OFFSETS) {
       const d = dPerp.sub(float(tOff)).abs();
-      tineInf.assign(tineInf.max(smoothstep(float(TINE_R), float(0.0), d)));
+      tineInf.assign(tineInf.max(smoothstep(uTineR, float(0.0), d)));
     }
 
     const influence = tineInf.mul(gate);
     const disp = dispBuffer.element(idx);
-    disp.assign(clamp(disp.add(influence.mul(float(PUSH_STRENGTH))), float(0.0), float(1.0)));
+    disp.assign(clamp(disp.add(influence.mul(uPushStrength)), float(0.0), float(1.0)));
   })().compute(COUNT, [64]);
 
   const clearCompute = Fn(() => {
@@ -193,6 +196,12 @@ async function buildTSLScene() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
+
+  window.__sandControls = {
+    setRakeRadius(v)    { RAKE_RADIUS = v; uRakeRadius.value = v; },
+    setPushStrength(v)  { PUSH_STRENGTH = v; uPushStrength.value = v; },
+    setTineRadius(v)    { TINE_R = v; uTineR.value = v; },
+  };
 
   let lastTime = performance.now();
   let frames   = 0;
@@ -409,6 +418,12 @@ function buildGLSLFallback() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
+
+  window.__sandControls = {
+    setRakeRadius(v)    { RAKE_RADIUS = v; simMat.uniforms.uRakeR.value = v / (EXTENT * 2); },
+    setPushStrength(v)  { PUSH_STRENGTH = v; simMat.uniforms.uPush.value = v; },
+    setTineRadius(v)    { TINE_R = v; simMat.uniforms.uTineR.value = v / (EXTENT * 2); },
+  };
 
   let lastTime = performance.now();
   let frames   = 0;
