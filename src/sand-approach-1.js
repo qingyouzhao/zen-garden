@@ -40,11 +40,11 @@ rakeGroup.position.set(0, 0, 2);
 scene.add(rakeGroup);
 
 // --- Rake displacement parameters ---
-const GROOVE_DEPTH  = 0.12;
-const GROOVE_RADIUS = 0.8;   // in cell units
-const RIDGE_WIDTH   = 2;     // cells out from tine centre on each side
-const MAX_HEIGHT    = 0.35;
-const MIN_HEIGHT    = -0.12;
+let GROOVE_DEPTH  = 0.12;
+let GROOVE_RADIUS = 0.8;   // in cell units
+let RIDGE_WIDTH   = 2;     // cells out from tine centre on each side
+let MAX_HEIGHT    = 0.35;
+const MIN_HEIGHT  = -0.12;
 const TINE_POSITIONS = [-2, -1, 0, 1, 2].map(i => i * 0.26);
 
 function applyRakeDisplacement(rakeX, rakeZ, dx, dz) {
@@ -133,6 +133,13 @@ createPointerInput(camera, renderer.domElement, {
     if (moveLen > 1e-5) rakeGroup.rotation.y = Math.atan2(dx, dz);
   },
 });
+
+window.__sandControls = {
+  setGrooveDepth(v)  { GROOVE_DEPTH = v; },
+  setGrooveRadius(v) { GROOVE_RADIUS = v; },
+  setRidgeWidth(v)   { RIDGE_WIDTH = v; },
+  setMaxHeight(v)    { MAX_HEIGHT = v; },
+};
 
 // --- Loop ---
 function animate() {
