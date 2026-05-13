@@ -21,10 +21,55 @@
       text-shadow: 0 1px 3px rgba(0,0,0,0.7);
     }
     #back:hover { opacity: 1; }
+    #controls {
+      position: fixed;
+      top: 44px;
+      left: 14px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 4px;
+      padding: 10px 14px;
+      color: #e8dcc8;
+      font-family: system-ui, sans-serif;
+      font-size: 11px;
+      min-width: 190px;
+      user-select: none;
+      line-height: 1.5;
+    }
+    #controls label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+    #controls input[type=range] { flex: 1; accent-color: #c8b89a; }
+    #controls span { min-width: 32px; text-align: right; opacity: 0.7; }
   </style>
 </head>
 <body>
   <a id="back" href="/zen-garden/">← back</a>
+  <div id="controls">
+    <label>repose angle° <input id="s-repose" type="range" min="10" max="60" step="1" value="30"><span id="v-repose">30°</span></label>
+    <label>tine depth <input id="s-depth" type="range" min="0.01" max="0.5" step="0.01" value="0.15"><span id="v-depth">0.15</span></label>
+    <label>tine radius <input id="s-radius" type="range" min="0.02" max="0.5" step="0.02" value="0.10"><span id="v-radius">0.10</span></label>
+    <label>settle iters <input id="s-iters" type="range" min="1" max="16" step="1" value="4"><span id="v-iters">4</span></label>
+  </div>
   <script type="module" src="/src/sand-approach-2.js"></script>
+  <script>
+    function wire() {
+      if (!window.__sandControls) { setTimeout(wire, 50); return; }
+      const c = window.__sandControls;
+      function bind(sid, vid, setter, fmt) {
+        const s = document.getElementById(sid), v = document.getElementById(vid);
+        s.addEventListener('input', () => { const n = +s.value; setter(n); v.textContent = fmt(n); });
+      }
+      bind('s-repose', 'v-repose', c.setRepose,      n => n + '°');
+      bind('s-depth',  'v-depth',  c.setTineDepth,   n => n.toFixed(2));
+      bind('s-radius', 'v-radius', c.setTineRadius,  n => n.toFixed(2));
+      bind('s-iters',  'v-iters',  c.setSettleIters, n => n);
+    }
+    wire();
+  </script>
 </body>
 </html>
