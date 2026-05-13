@@ -43,6 +43,10 @@ const simFrag = /* glsl */`
   uniform vec2 uTines[5];
   uniform float uRakeActive;
   uniform float uDelta;
+  uniform float uRepose;
+  uniform float uFlow;
+  uniform float uGrooveDepth;
+  uniform float uRidgeHeight;
   varying vec2 vUv;
 
   void main() {
@@ -55,17 +59,16 @@ const simFrag = /* glsl */`
     float hE = texture2D(uHeightmap, uv + vec2(texel.x, 0.0)).r;
     float hW = texture2D(uHeightmap, uv - vec2(texel.x, 0.0)).r;
 
-    float repose = 0.15;
     float flow = 0.0;
-    flow += max(0.0, (hN - h) - repose) * 0.25;
-    flow += max(0.0, (hS - h) - repose) * 0.25;
-    flow += max(0.0, (hE - h) - repose) * 0.25;
-    flow += max(0.0, (hW - h) - repose) * 0.25;
+    flow += max(0.0, (hN - h) - uRepose) * uFlow;
+    flow += max(0.0, (hS - h) - uRepose) * uFlow;
+    flow += max(0.0, (hE - h) - uRepose) * uFlow;
+    flow += max(0.0, (hW - h) - uRepose) * uFlow;
     float outflow = 0.0;
-    outflow += max(0.0, (h - hN) - repose) * 0.25;
-    outflow += max(0.0, (h - hS) - repose) * 0.25;
-    outflow += max(0.0, (h - hE) - repose) * 0.25;
-    outflow += max(0.0, (h - hW) - repose) * 0.25;
+    outflow += max(0.0, (h - hN) - uRepose) * uFlow;
+    outflow += max(0.0, (h - hS) - uRepose) * uFlow;
+    outflow += max(0.0, (h - hE) - uRepose) * uFlow;
+    outflow += max(0.0, (h - hW) - uRepose) * uFlow;
 
     h += (flow - outflow) * uDelta * 60.0;
 
@@ -74,8 +77,8 @@ const simFrag = /* glsl */`
         float dist = length(uv - uTines[i]);
         float groove = smoothstep(0.012, 0.005, dist);
         float ridge  = smoothstep(0.025, 0.015, dist) - smoothstep(0.015, 0.008, dist);
-        h -= groove * 0.08;
-        h += ridge  * 0.04;
+        h -= groove * uGrooveDepth;
+        h += ridge  * uRidgeHeight;
       }
     }
 
@@ -98,6 +101,10 @@ const simMaterial = new THREE.ShaderMaterial({
     ]},
     uRakeActive: { value: 0.0 },
     uDelta: { value: 0.016 },
+    uRepose: { value: 0.15 },
+    uFlow: { value: 0.25 },
+    uGrooveDepth: { value: 0.08 },
+    uRidgeHeight: { value: 0.04 },
   },
   depthTest: false,
   depthWrite: false,
@@ -227,3 +234,10 @@ function animate() {
   renderer.render(scene, camera);
 }
 animate();
+
+window.__sandControls = {
+  setRepose(v)      { simMaterial.uniforms.uRepose.value = v; },
+  setFlow(v)        { simMaterial.uniforms.uFlow.value = v; },
+  setGrooveDepth(v) { simMaterial.uniforms.uGrooveDepth.value = v; },
+  setRidgeHeight(v) { simMaterial.uniforms.uRidgeHeight.value = v; },
+};
