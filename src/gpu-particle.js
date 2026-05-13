@@ -36,12 +36,12 @@ const HEX_R  = (EXTENT * 2) / GRID / Math.sqrt(3);
 const H_STEP = HEX_R * Math.sqrt(3);
 const V_STEP = HEX_R * 1.5;
 
-const RAKE_RADIUS    = 0.9;
-const GRAVITY        = 14.0;
-const BOUNCE         = 0.22;
-const FLOOR_FRICTION = 0.78;
-const SPRING_K       = 2.5;
-const MAX_EJECT      = 12.0;
+let RAKE_RADIUS    = 0.9;
+let GRAVITY        = 14.0;
+let BOUNCE         = 0.22;
+let FLOOR_FRICTION = 0.78;
+let SPRING_K       = 2.5;
+let MAX_EJECT      = 12.0;
 
 // ---------------------------------------------------------------------------
 // TSL / WebGPU path
@@ -77,10 +77,16 @@ async function buildTSLScene() {
   const posBuffer = instancedArray(COUNT, 'vec4'); // (pos.xyz, home.x)
   const velBuffer = instancedArray(COUNT, 'vec4'); // (vel.xyz, home.z)
 
-  const uRakePos   = uniform(new THREE.Vector2(9999, 9999));
-  const uRakeDir   = uniform(new THREE.Vector2(1, 0));
-  const uRakeSpeed = uniform(0.0);
-  const uDt        = uniform(0.016);
+  const uRakePos      = uniform(new THREE.Vector2(9999, 9999));
+  const uRakeDir      = uniform(new THREE.Vector2(1, 0));
+  const uRakeSpeed    = uniform(0.0);
+  const uDt           = uniform(0.016);
+  const uRakeRadius   = uniform(RAKE_RADIUS);
+  const uGravity      = uniform(GRAVITY);
+  const uBounce       = uniform(BOUNCE);
+  const uFloorFric    = uniform(FLOOR_FRICTION);
+  const uSpringK      = uniform(SPRING_K);
+  const uMaxEject     = uniform(MAX_EJECT);
 
   // -------------------------------------------------------------------------
   // Init compute: place particles at hex grid positions, zero velocity
@@ -126,7 +132,7 @@ async function buildTSLScene() {
     const dz   = pz.sub(uRakePos.y);
     const dist = dx.mul(dx).add(dz.mul(dz)).sqrt();
 
-    const nearRake   = smoothstep(float(RAKE_RADIUS), float(0.0), dist);
+    const nearRake   = smoothstep(uRakeRadius, float(0.0), dist);
     const nearGround = smoothstep(float(0.4), float(0.0), py);
     const impulse    = nearRake.mul(nearGround).mul(uRakeSpeed);
 
@@ -139,24 +145,24 @@ async function buildTSLScene() {
 
     vx.assign(clamp(
       vx.add(uRakeDir.x.add(perpX.mul(perpFactor)).mul(impulse).mul(float(5.0))),
-      float(-MAX_EJECT), float(MAX_EJECT)
+      uMaxEject.negate(), uMaxEject
     ));
     vy.assign(clamp(
       vy.add(impulse.mul(float(15.0))),
-      float(0.0), float(MAX_EJECT)
+      float(0.0), uMaxEject
     ));
     vz.assign(clamp(
       vz.add(uRakeDir.y.add(perpZ.mul(perpFactor)).mul(impulse).mul(float(5.0))),
-      float(-MAX_EJECT), float(MAX_EJECT)
+      uMaxEject.negate(), uMaxEject
     ));
 
     // Home spring: horizontal only, only while near ground
     const groundWeight = nearGround;
-    vx.assign(vx.add(homeX.sub(px).mul(float(SPRING_K)).mul(uDt).mul(groundWeight)));
-    vz.assign(vz.add(homeZ.sub(pz).mul(float(SPRING_K)).mul(uDt).mul(groundWeight)));
+    vx.assign(vx.add(homeX.sub(px).mul(uSpringK).mul(uDt).mul(groundWeight)));
+    vz.assign(vz.add(homeZ.sub(pz).mul(uSpringK).mul(uDt).mul(groundWeight)));
 
     // Gravity
-    vy.assign(vy.sub(float(GRAVITY).mul(uDt)));
+    vy.assign(vy.sub(uGravity.mul(uDt)));
 
     // Integrate
     px.assign(px.add(vx.mul(uDt)));
@@ -166,9 +172,9 @@ async function buildTSLScene() {
     // Floor collision
     If(py.lessThan(float(0.0)), () => {
       py.assign(float(0.0));
-      vy.assign(vy.abs().negate().mul(float(BOUNCE)));
-      vx.assign(vx.mul(float(FLOOR_FRICTION)));
-      vz.assign(vz.mul(float(FLOOR_FRICTION)));
+      vy.assign(vy.abs().negate().mul(uBounce));
+      vx.assign(vx.mul(uFloorFric));
+      vz.assign(vz.mul(uFloorFric));
     });
 
     // Bounds clamp
@@ -257,7 +263,13 @@ async function buildTSLScene() {
     const now = performance.now();
     const dt  = Math.min((now - lastTime) / 1000, 0.05);
     lastTime  = now;
-    uDt.value = dt;
+    uDt.value          = dt;
+    uRakeRadius.value  = RAKE_RADIUS;
+    uGravity.value     = GRAVITY;
+    uBounce.value      = BOUNCE;
+    uFloorFric.value   = FLOOR_FRICTION;
+    uSpringK.value     = SPRING_K;
+    uMaxEject.value    = MAX_EJECT;
 
     // Rake speed from per-frame position delta
     const rx = uRakePos.value.x;
@@ -350,12 +362,18 @@ function buildGLSLFallback() {
 
   // ---- Velocity update shader (reads posA + velA → writes velB) -----------
   const velUniforms = {
-    uPos:      { value: null },
-    uVel:      { value: null },
-    uRakePos:  { value: new THREE.Vector2(9999, 9999) },
-    uRakeDir:  { value: new THREE.Vector2(1, 0) },
-    uRakeSpeed: { value: 0.0 },
-    uDt:       { value: 0.016 },
+    uPos:         { value: null },
+    uVel:         { value: null },
+    uRakePos:     { value: new THREE.Vector2(9999, 9999) },
+    uRakeDir:     { value: new THREE.Vector2(1, 0) },
+    uRakeSpeed:   { value: 0.0 },
+    uDt:          { value: 0.016 },
+    uRakeRadius:  { value: RAKE_RADIUS },
+    uGravity:     { value: GRAVITY },
+    uBounce:      { value: BOUNCE },
+    uFloorFric:   { value: FLOOR_FRICTION },
+    uSpringK:     { value: SPRING_K },
+    uMaxEject:    { value: MAX_EJECT },
   };
   const velMat = new THREE.ShaderMaterial({
     uniforms: velUniforms,
@@ -370,6 +388,12 @@ function buildGLSLFallback() {
       uniform vec2  uRakeDir;
       uniform float uRakeSpeed;
       uniform float uDt;
+      uniform float uRakeRadius;
+      uniform float uGravity;
+      uniform float uBounce;
+      uniform float uFloorFric;
+      uniform float uSpringK;
+      uniform float uMaxEject;
       varying vec2 vUv;
 
       void main() {
@@ -382,7 +406,7 @@ function buildGLSLFallback() {
 
         vec2  dp       = vec2(px, pz) - uRakePos;
         float dist     = length(dp);
-        float nearRake   = 1.0 - smoothstep(0.0, ${RAKE_RADIUS.toFixed(2)}, dist);
+        float nearRake   = 1.0 - smoothstep(0.0, uRakeRadius, dist);
         float nearGround = 1.0 - smoothstep(0.0, 0.4, py);
         float impulse    = nearRake * nearGround * uRakeSpeed;
 
@@ -390,19 +414,19 @@ function buildGLSLFallback() {
         float perpFactor = sin(seed) * 0.45;
         vec2  perp       = vec2(-uRakeDir.y, uRakeDir.x);
 
-        vx = clamp(vx + (uRakeDir.x + perp.x * perpFactor) * impulse * 5.0, -${MAX_EJECT.toFixed(1)}, ${MAX_EJECT.toFixed(1)});
-        vy = clamp(vy + impulse * 15.0, 0.0, ${MAX_EJECT.toFixed(1)});
-        vz = clamp(vz + (uRakeDir.y + perp.y * perpFactor) * impulse * 5.0, -${MAX_EJECT.toFixed(1)}, ${MAX_EJECT.toFixed(1)});
+        vx = clamp(vx + (uRakeDir.x + perp.x * perpFactor) * impulse * 5.0, -uMaxEject, uMaxEject);
+        vy = clamp(vy + impulse * 15.0, 0.0, uMaxEject);
+        vz = clamp(vz + (uRakeDir.y + perp.y * perpFactor) * impulse * 5.0, -uMaxEject, uMaxEject);
 
-        vx += (homeX - px) * ${SPRING_K.toFixed(1)} * uDt * nearGround;
-        vz += (homeZ - pz) * ${SPRING_K.toFixed(1)} * uDt * nearGround;
+        vx += (homeX - px) * uSpringK * uDt * nearGround;
+        vz += (homeZ - pz) * uSpringK * uDt * nearGround;
 
-        vy -= ${GRAVITY.toFixed(1)} * uDt;
+        vy -= uGravity * uDt;
 
         if (py <= 0.0) {
-          vy = -abs(vy) * ${BOUNCE.toFixed(2)};
-          vx *= ${FLOOR_FRICTION.toFixed(2)};
-          vz *= ${FLOOR_FRICTION.toFixed(2)};
+          vy = -abs(vy) * uBounce;
+          vx *= uFloorFric;
+          vz *= uFloorFric;
         }
 
         gl_FragColor = vec4(vx, vy, vz, homeZ);
@@ -551,8 +575,14 @@ function buildGLSLFallback() {
     const dt  = Math.min((now - lastTime) / 1000, 0.05);
     lastTime  = now;
 
-    velUniforms.uDt.value = dt;
-    posMat.uniforms.uDt.value = dt;
+    velUniforms.uDt.value         = dt;
+    velUniforms.uRakeRadius.value = RAKE_RADIUS;
+    velUniforms.uGravity.value    = GRAVITY;
+    velUniforms.uBounce.value     = BOUNCE;
+    velUniforms.uFloorFric.value  = FLOOR_FRICTION;
+    velUniforms.uSpringK.value    = SPRING_K;
+    velUniforms.uMaxEject.value   = MAX_EJECT;
+    posMat.uniforms.uDt.value     = dt;
 
     // Rake speed
     const rx = velUniforms.uRakePos.value.x;
@@ -596,6 +626,19 @@ function buildGLSLFallback() {
   }
   animate();
 }
+
+// ---------------------------------------------------------------------------
+// Live control API
+// ---------------------------------------------------------------------------
+
+window.__sandControls = {
+  setGravity(v)       { GRAVITY = v; },
+  setBounce(v)        { BOUNCE = v; },
+  setFloorFriction(v) { FLOOR_FRICTION = v; },
+  setSpringK(v)       { SPRING_K = v; },
+  setMaxEject(v)      { MAX_EJECT = v; },
+  setRakeRadius(v)    { RAKE_RADIUS = v; },
+};
 
 // ---------------------------------------------------------------------------
 // Entry point

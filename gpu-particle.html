@@ -73,6 +73,30 @@
       padding: 8px 14px;
       text-align: center;
     }
+    #controls {
+      position: fixed;
+      top: 70px;
+      left: 14px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 4px;
+      padding: 10px 14px;
+      color: #e8dcc8;
+      font-family: system-ui, sans-serif;
+      font-size: 11px;
+      min-width: 190px;
+      user-select: none;
+      line-height: 1.5;
+    }
+    #controls label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+    #controls input[type=range] { flex: 1; accent-color: #c8b89a; }
+    #controls span { min-width: 32px; text-align: right; opacity: 0.7; }
   </style>
 </head>
 <body>
@@ -80,11 +104,36 @@
     Zen Garden — GPU Particles
     <span>drag to rake  |  detecting renderer...</span>
   </div>
+  <div id="controls">
+    <label>gravity <input id="s-grav" type="range" min="1" max="40" step="1" value="14"><span id="v-grav">14</span></label>
+    <label>bounce <input id="s-bounce" type="range" min="0" max="1" step="0.02" value="0.22"><span id="v-bounce">0.22</span></label>
+    <label>floor friction <input id="s-fric" type="range" min="0" max="1" step="0.02" value="0.78"><span id="v-fric">0.78</span></label>
+    <label>spring k <input id="s-spring" type="range" min="0.1" max="10" step="0.1" value="2.5"><span id="v-spring">2.5</span></label>
+    <label>max eject <input id="s-eject" type="range" min="1" max="30" step="1" value="12"><span id="v-eject">12</span></label>
+    <label>rake radius <input id="s-rake" type="range" min="0.1" max="2.5" step="0.1" value="0.9"><span id="v-rake">0.9</span></label>
+  </div>
   <a id="back" href="/zen-garden/">← back</a>
   <button id="clear-btn">clear</button>
   <div id="fallback-banner">
     WebGPU/WebGL2 compute unavailable — using GLSL ping-pong fallback
   </div>
   <script type="module" src="/src/gpu-particle.js"></script>
+  <script>
+    function wire() {
+      if (!window.__sandControls) { setTimeout(wire, 50); return; }
+      const c = window.__sandControls;
+      function bind(sid, vid, setter, fmt) {
+        const s = document.getElementById(sid), v = document.getElementById(vid);
+        s.addEventListener('input', () => { const n = +s.value; setter(n); v.textContent = fmt(n); });
+      }
+      bind('s-grav',   'v-grav',   c.setGravity,      n => n);
+      bind('s-bounce', 'v-bounce', c.setBounce,        n => n.toFixed(2));
+      bind('s-fric',   'v-fric',   c.setFloorFriction, n => n.toFixed(2));
+      bind('s-spring', 'v-spring', c.setSpringK,       n => n.toFixed(1));
+      bind('s-eject',  'v-eject',  c.setMaxEject,      n => n);
+      bind('s-rake',   'v-rake',   c.setRakeRadius,    n => n.toFixed(1));
+    }
+    wire();
+  </script>
 </body>
 </html>
