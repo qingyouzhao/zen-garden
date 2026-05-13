@@ -14,7 +14,7 @@ const WORLD_SIZE = 14;
 const CELL_SIZE = WORLD_SIZE / GRID;
 
 // Repose angle: ~30 degrees → tan(30°) ≈ 0.577
-const TAN_REPOSE = Math.tan(Math.PI / 6);
+let TAN_REPOSE = Math.tan(Math.PI / 6);
 
 const heightmap = new Float32Array(VERTS * VERTS);
 
@@ -124,8 +124,8 @@ rakeGroup.position.set(0, 0, 2);
 scene.add(rakeGroup);
 
 const TINE_OFFSETS = [-2, -1, 0, 1, 2].map(i => i * 0.26);
-const TINE_DEPTH = 0.15;
-const TINE_RADIUS = 0.10;
+let TINE_DEPTH = 0.15;
+let TINE_RADIUS = 0.10;
 
 function displaceWithRake(rakeX, rakeZ, dx, dz) {
   const moveDist = Math.sqrt(dx * dx + dz * dz);
@@ -206,12 +206,20 @@ createPointerInput(camera, renderer.domElement, {
 
 // --- Loop ---
 const SETTLE_THRESHOLD = 0.0001;
+let SETTLE_ITERS = 4;
+
+window.__sandControls = {
+  setRepose(deg)      { TAN_REPOSE = Math.tan(deg * Math.PI / 180); },
+  setTineDepth(v)     { TINE_DEPTH = v; },
+  setTineRadius(v)    { TINE_RADIUS = v; },
+  setSettleIters(v)   { SETTLE_ITERS = v; },
+};
 
 function animate() {
   requestAnimationFrame(animate);
 
   if (hasDirty()) {
-    relaxSand(4);
+    relaxSand(SETTLE_ITERS);
     if (maxTransfer > SETTLE_THRESHOLD) {
       expandDirty(2);
     } else {
